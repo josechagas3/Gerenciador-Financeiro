@@ -54,44 +54,91 @@ create index transactions_category_idx on finance.transactions (category_id, occ
 create index transactions_transfer_idx on finance.transactions (transfer_group_id) where transfer_group_id is not null;
 create index transactions_original_idx on finance.transactions (original_transaction_id) where original_transaction_id is not null;
 
--- Valida a operação inteira no commit: exatamente duas pernas, contas distintas,
--- mesma quantia, uma saída e uma entrada. A operação usa uma única idempotency_key.
+-- Transições de transferência são coordenadas pela operação, nunca por uma
+-- perna isolada: pending -> posted ou pending -> cancelled; posted/cancelled
+-- são terminais. O cancelamento exige as duas pernas canceladas no mesmo commit.
 create or replace function finance.validate_transfer_operation()
 returns trigger language plpgsql as $$
 declare
   op finance.transfer_operations;
   operation_id uuid;
   leg_count integer;
+  posted_count integer;
+  cancelled_count integer;
+  pending_count integer;
+  from_legs integer;
+  to_legs integer;
   total_signed bigint;
   distinct_accounts integer;
 begin
-  if tg_table_name = 'transfer_operations' then
-    operation_id := new.id;
-  else
-    operation_id := new.transfer_group_id;
-  end if;
+  operation_id := case when tg_table_name = 'transfer_operations' then new.id else new.transfer_group_id end;
   select * into op from finance.transfer_operations where id = operation_id for update;
-  select count(*), coalesce(sum(amount_cents * entry_sign), 0), count(distinct account_id)
-    into leg_count, total_signed, distinct_accounts
+  select count(*), count(*) filter (where status = 'posted'), count(*) filter (where status = 'cancelled'),
+         count(*) filter (where status = 'pending'), count(distinct account_id),
+         count(*) filter (where account_id = op.from_account_id and entry_sign = -1),
+         count(*) filter (where account_id = op.to_account_id and entry_sign = 1),
+         coalesce(sum(amount_cents * entry_sign) filter (where status = 'posted'), 0)
+    into leg_count, posted_count, cancelled_count, pending_count, distinct_accounts,
+         from_legs, to_legs, total_signed
     from finance.transactions
-    where transfer_group_id = operation_id and status = 'posted';
-  if op.status = 'posted' and (leg_count <> 2 or total_signed <> 0 or distinct_accounts <> 2) then
-    raise exception 'transfer operation must have two posted opposite legs';
+    where transfer_group_id = operation_id;
+
+  if op.status = 'pending' and (posted_count > 0 or cancelled_count > 0) then
+    raise exception 'pending transfer cannot contain finalized legs';
   end if;
-  if tg_op = 'DELETE' then
-    return old;
+  if op.status = 'posted' and not (leg_count = 2 and posted_count = 2 and cancelled_count = 0 and pending_count = 0
+      and distinct_accounts = 2 and from_legs = 1 and to_legs = 1
+      and total_signed = 0
+      and not exists (select 1 from finance.transactions t where t.transfer_group_id = operation_id and t.amount_cents <> op.amount_cents)) then
+    raise exception 'posted transfer must have exactly two complete opposite legs';
+  end if;
+  if op.status = 'cancelled' and not (leg_count = 2 and cancelled_count = 2 and posted_count = 0 and pending_count = 0) then
+    raise exception 'cancelled transfer must have two cancelled legs and no posted leg';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end;
+$$;
+
+create or replace function finance.prevent_partial_transfer_leg_change()
+returns trigger language plpgsql as $$
+declare
+  op_status text;
+  old_status text;
+begin
+  if new.transfer_group_id is null then return new; end if;
+  select status into op_status from finance.transfer_operations where id = new.transfer_group_id for update;
+  old_status := case when tg_op = 'UPDATE' then old.status else null end;
+  if tg_op = 'UPDATE' and old_status <> new.status and old_status in ('posted', 'cancelled') then
+    raise exception 'posted and cancelled transfer legs are terminal';
   end if;
   return new;
 end;
 $$;
+
+create or replace function finance.validate_transfer_status_transition()
+returns trigger language plpgsql as $$
+begin
+  if old.status <> new.status and (old.status in ('posted', 'cancelled') or
+      (old.status = 'pending' and new.status not in ('posted', 'cancelled'))) then
+    raise exception 'invalid transfer status transition';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger transfer_status_transition_guard
+  before update on finance.transfer_operations
+  for each row execute function finance.validate_transfer_status_transition();
+create trigger transfer_leg_change_guard
+  before insert or update on finance.transactions
+  for each row execute function finance.prevent_partial_transfer_leg_change();
 create constraint trigger transfer_operation_integrity
   after insert or update on finance.transactions
-  deferrable initially deferred
-  for each row execute function finance.validate_transfer_operation();
+  deferrable initially deferred for each row execute function finance.validate_transfer_operation();
 create constraint trigger transfer_operation_status_integrity
   after insert or update on finance.transfer_operations
-  deferrable initially deferred
-  for each row execute function finance.validate_transfer_operation();
+  deferrable initially deferred for each row execute function finance.validate_transfer_operation();
 
 -- Compras no cartão são despesas na data da compra; o pagamento da fatura é
 -- separado e não duplica o resultado financeiro.
@@ -133,31 +180,30 @@ create index card_invoices_account_due_idx on finance.card_invoices (account_id,
 create index invoice_items_invoice_idx on finance.card_invoice_items (invoice_id);
 create index card_payments_invoice_idx on finance.card_payments (invoice_id, paid_at);
 
--- Soma e limite de pagamentos são verificados sob lock da fatura; isso cobre
--- pagamentos concorrentes e alterações concorrentes de encargos.
+-- O servidor deve bloquear a linha da fatura antes de qualquer mutação. O
+-- trigger adiado repete o lock e valida cabeçalho, itens e pagamentos no commit.
 create or replace function finance.validate_invoice_totals()
 returns trigger language plpgsql as $$
 declare
-  invoice_id_value uuid := coalesce(new.invoice_id, old.invoice_id);
+  invoice_id_value uuid;
   item_total bigint;
   paid_total bigint;
   declared_total bigint;
 begin
+  invoice_id_value := case when tg_op = 'DELETE' then old.invoice_id else new.invoice_id end;
   select total_cents into declared_total from finance.card_invoices where id = invoice_id_value for update;
   select coalesce(sum(total_cents), 0) into item_total from finance.card_invoice_items where invoice_id = invoice_id_value;
   select coalesce(sum(paid_cents), 0) into paid_total from finance.card_payments where invoice_id = invoice_id_value;
-  if tg_table_name = 'card_invoice_items' and declared_total <> item_total then
-    raise exception 'invoice total must equal the sum of its items';
-  end if;
-  if paid_total > item_total then
-    raise exception 'invoice payments cannot exceed the amount due';
-  end if;
-  if tg_op = 'DELETE' then
-    return old;
-  end if;
+  if declared_total <> item_total then raise exception 'invoice total must equal the sum of its items'; end if;
+  if paid_total > item_total then raise exception 'invoice payments cannot exceed the amount due'; end if;
+  if tg_op = 'DELETE' then return old; end if;
   return new;
 end;
 $$;
+
+create constraint trigger invoice_header_integrity
+  after insert or update on finance.card_invoices
+  deferrable initially deferred for each row execute function finance.validate_invoice_totals();
 create constraint trigger invoice_items_integrity
   after insert or update or delete on finance.card_invoice_items
   deferrable initially deferred for each row execute function finance.validate_invoice_totals();

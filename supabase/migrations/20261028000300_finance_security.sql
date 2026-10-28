@@ -42,4 +42,4 @@ alter table finance.card_payments enable row level security;
 -- explícito e policy explícita apenas para dados não sensíveis.
 
 comment on schema finance is 'Dados financeiros internos; não expor diretamente pela Data API.';
-comment on column finance.accounts.opening_balance_cents is 'Fonte oficial única do saldo inicial; não duplicar em evento de abertura.';
+comment on table finance.transactions is 'O lançamento opening, único por conta, é a fonte oficial do saldo inicial; não duplicar em campo de accounts.';

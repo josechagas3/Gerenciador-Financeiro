@@ -14,7 +14,7 @@ Não acessar `supabase-lime-house`.
 
 ## Decisões
 
-- **Saldo inicial:** somente `finance.accounts.opening_balance_cents` + `opening_balance_as_of`. Não criar evento contábil de abertura que altere o saldo.
+- **Saldo inicial:** o único registro oficial é um lançamento `finance.transactions` com `transaction_type = 'opening'`, `status = 'posted'`, `amount_cents` em centavos inteiros e `occurred_at` na data de abertura. Há no máximo um evento de abertura por conta, garantido por índice único parcial. Não existe `opening_balance_cents` nem `opening_balance_as_of` em `finance.accounts`, evitando dupla contagem.
 - **Centavos:** todos os valores monetários são `bigint`; no TypeScript devem ser recebidos como string ou convertidos para `bigint`, calculados apenas com `bigint`, e serializados como string. Não usar `number`, `parseFloat`, `toFixed` ou JSON com `bigint` nativo.
 - **Compras no cartão:** a compra é uma despesa na data da compra; itens de fatura detalham principal/encargos. O pagamento parcial é um lançamento separado ligado à fatura. Encargos ficam separados de principal. O pagamento não duplica a despesa; altera caixa e obrigação.
 - **Fluxo de caixa, resultado e patrimônio:** caixa é derivado de lançamentos `posted` nas contas de caixa; resultado é receitas menos despesas reconhecidas; patrimônio líquido é saldo inicial + resultado acumulado + ajustes. Transferências não alteram resultado; apenas movem caixa/obrigações. A implementação de relatórios fica fora desta etapa.

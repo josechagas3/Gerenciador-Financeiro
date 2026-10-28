@@ -6,7 +6,7 @@ create table finance.transactions (
   id uuid primary key default gen_random_uuid(),
   account_id uuid not null references finance.accounts(id) on delete restrict,
   category_id uuid references finance.categories(id) on delete restrict,
-  transaction_type text not null check (transaction_type in ('income', 'expense', 'transfer', 'adjustment', 'reversal')),
+  transaction_type text not null check (transaction_type in ('opening', 'income', 'expense', 'transfer', 'adjustment', 'reversal')),
   status text not null default 'pending' check (status in ('pending', 'posted', 'cancelled')),
   amount_cents bigint not null check (amount_cents > 0),
   occurred_at timestamptz not null,
@@ -20,10 +20,13 @@ create table finance.transactions (
   check ((transaction_type = 'transfer') = (transfer_group_id is not null)),
   check ((transaction_type in ('reversal', 'adjustment')) = (original_transaction_id is not null)),
   check (transaction_type <> 'income' or category_id is not null),
-  check (transaction_type <> 'expense' or category_id is not null)
+  check (transaction_type <> 'expense' or category_id is not null),
+  check (transaction_type <> 'opening' or (category_id is null and original_transaction_id is null and transfer_group_id is null))
 );
 
 create unique index transactions_idempotency_unique on finance.transactions (idempotency_key);
+create unique index transactions_one_opening_per_account on finance.transactions (account_id)
+  where transaction_type = 'opening';
 create index transactions_account_date_idx on finance.transactions (account_id, occurred_at desc);
 create index transactions_status_idx on finance.transactions (status, occurred_at desc);
 create index transactions_category_idx on finance.transactions (category_id, occurred_at desc);

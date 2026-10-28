@@ -5,16 +5,14 @@
 
 create schema if not exists finance;
 
--- O saldo inicial oficial vive exclusivamente em finance.accounts.opening_balance_cents.
--- Não existe evento de abertura que também altere o saldo; isso evita dupla contagem.
+-- O saldo inicial oficial será registrado por um único evento de abertura no ledger.
+-- A tabela accounts não mantém um campo de saldo inicial paralelo.
 
 create table finance.accounts (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   account_type text not null check (account_type in ('checking', 'savings', 'cash', 'credit_card', 'investment', 'other')),
   currency_code char(3) not null default 'BRL' check (currency_code ~ '^[A-Z]{3}$'),
-  opening_balance_cents bigint not null default 0,
-  opening_balance_as_of date not null,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),

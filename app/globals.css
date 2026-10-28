@@ -43,3 +43,24 @@ button { font: inherit; cursor: pointer; }
 .mobile-menu, .mobile-close, .sidebar-overlay { display: none; }
 @media (max-width: 900px) { .sidebar { transform: translateX(-100%); transition: transform .2s ease; box-shadow: 10px 0 30px #153d2c18; } .sidebar-open { transform: translateX(0); } .sidebar-overlay { display: block; position: fixed; inset: 0; z-index: 19; background: #193a2d40; border: 0; } .mobile-close, .mobile-menu { display: block; } .main-content { margin-left: 0; } .topbar { padding: 0 20px; gap: 12px; } .breadcrumb { margin-right: auto; } .page-wrapper { padding: 28px 20px 35px; } .metrics-grid { grid-template-columns: repeat(2, 1fr); } .content-grid, .lower-grid { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .welcome-row { align-items: flex-start; flex-direction: column; gap: 19px; } .primary-button { width: 100%; } .metrics-grid { gap: 10px; } .metric-card { padding: 14px; min-height: 124px; } .metric-value { font-size: 17px; } .panel { padding: 16px; } .info-banner { align-items: flex-start; flex-wrap: wrap; } .banner-button { margin-left: 43px; margin-top: -8px; } h1 { font-size: 22px; } }
+.module-grid { display: grid; grid-template-columns: minmax(270px, .8fr) minmax(0, 1.4fr); gap: 17px; margin-bottom: 17px; }
+.form-panel form { display: flex; flex-direction: column; gap: 13px; margin-top: 20px; }
+.form-field { display: flex; flex-direction: column; gap: 6px; color: #718078; font-size: 10px; font-weight: 600; }
+.form-field input, .form-field select, .filter-grid input, .filter-grid select { width: 100%; border: 1px solid #dfe9e2; border-radius: 7px; background: #fbfdfc; color: #304139; font: inherit; font-size: 12px; padding: 10px 11px; outline: none; }
+.form-field input:focus, .form-field select:focus, .filter-grid input:focus, .filter-grid select:focus { border-color: #53b789; box-shadow: 0 0 0 3px #e3f6eb; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.account-list, .category-list, .movement-list { display: flex; flex-direction: column; gap: 2px; margin-top: 18px; }
+.account-row, .category-row, .movement-row { display: flex; align-items: center; gap: 11px; padding: 11px 0; border-bottom: 1px solid #eff3f0; }
+.account-row:last-child, .category-row:last-child, .movement-row:last-child { border-bottom: 0; }
+.account-row > div, .category-row > div, .movement-row > div { min-width: 0; flex: 1; }
+.account-row strong, .category-row strong, .movement-row strong { display: block; color: #34463c; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.account-row small, .category-row small, .movement-row small { display: block; color: #9aa79f; font-size: 10px; margin-top: 4px; }
+.account-row b, .movement-row b { color: #34463c; font-size: 12px; white-space: nowrap; }
+.account-icon, .movement-icon { width: 31px; height: 31px; border-radius: 9px; display: grid; place-items: center; color: #258f61; background: #e8f7ee; flex: 0 0 auto; }
+.movement-icon.income { color: #258fc1; background: #e8f3fb; } .movement-icon.expense { color: #d88945; background: #fff1e2; }
+.small-button { border: 0; background: transparent; color: #299b69; font-size: 10px; font-weight: 600; }
+.category-row.subcategory { padding-left: 25px; } .category-dot { width: 8px; height: 8px; border-radius: 50%; background: #59b98a; flex: 0 0 auto; } .subcategory .category-dot { background: #b6d7c5; }
+.filter-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin: 18px 0 7px; } .filter-grid input, .filter-grid select { font-size: 10px; padding: 8px; }
+.summary-bars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 36px; } .summary-bars div { border: 1px solid #edf2ee; border-radius: 9px; padding: 13px; } .summary-bars span { display: block; color: #8c9b93; font-size: 10px; margin-bottom: 7px; } .summary-bars strong { color: #30483a; font-size: 14px; } .positive { color: #218b5d !important; } .negative { color: #c77742 !important; } .data-badge { color: #7e9788; background: #f1f8f3; border-radius: 20px; padding: 6px 9px; font-size: 10px; }
+@media (max-width: 900px) { .module-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .filter-grid { grid-template-columns: 1fr 1fr; } .summary-bars { grid-template-columns: 1fr; margin-top: 20px; } .account-row b { margin-left: auto; } .small-button { display: none; } }

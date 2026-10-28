@@ -1,145 +1,82 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
-  ArrowDownLeft,
-  ArrowUpRight,
-  BarChart3,
-  Bell,
-  BookOpen,
-  BriefcaseBusiness,
-  CalendarDays,
-  ChevronRight,
-  CreditCard,
-  FileText,
-  Flag,
-  LayoutDashboard,
-  Menu,
-  PiggyBank,
-  Plus,
-  ReceiptText,
-  Settings2,
-  Tags,
-  Target,
-  Wallet,
-  X,
+  ArrowDownLeft, ArrowUpRight, BarChart3, Bell, BookOpen, BriefcaseBusiness, CalendarDays,
+  ChevronRight, CreditCard, FileText, Flag, LayoutDashboard, Menu, PiggyBank, Plus,
+  ReceiptText, Settings2, Tags, Target, Wallet, X,
 } from 'lucide-react'
 
+type Account = { id: string; name: string; type: string; opening: number }
+type Category = { id: string; name: string; parentId: string | null; kind: 'income' | 'expense' | 'both' }
+type Movement = { id: string; accountId: string; categoryId: string; type: 'income' | 'expense'; amount: number; date: string; description: string }
+
 const navigation = [
-  { label: 'Visão geral', icon: LayoutDashboard, active: true },
-  { label: 'Contas', icon: Wallet },
-  { label: 'Lançamentos', icon: ReceiptText },
-  { label: 'Categorias', icon: Tags },
-  { label: 'Cartões', icon: CreditCard },
-  { label: 'Faturas', icon: FileText },
-  { label: 'Dívidas', icon: BookOpen },
-  { label: 'Investimentos', icon: BriefcaseBusiness },
-  { label: 'Objetivos', icon: Target },
-  { label: 'Relatórios', icon: BarChart3 },
+  { label: 'Visão geral', icon: LayoutDashboard }, { label: 'Contas', icon: Wallet },
+  { label: 'Lançamentos', icon: ReceiptText }, { label: 'Categorias', icon: Tags },
+  { label: 'Cartões', icon: CreditCard }, { label: 'Faturas', icon: FileText },
+  { label: 'Dívidas', icon: BookOpen }, { label: 'Investimentos', icon: BriefcaseBusiness },
+  { label: 'Objetivos', icon: Target }, { label: 'Relatórios', icon: BarChart3 },
 ]
 
-const metrics = [
-  { label: 'Saldo total', value: 'R$ 0,00', helper: 'Nenhuma conta cadastrada', icon: Wallet, tone: 'green' },
-  { label: 'Receitas do mês', value: 'R$ 0,00', helper: 'Nenhuma receita registrada', icon: ArrowUpRight, tone: 'blue' },
-  { label: 'Despesas do mês', value: 'R$ 0,00', helper: 'Nenhuma despesa registrada', icon: ArrowDownLeft, tone: 'orange' },
-  { label: 'Investimentos', value: 'R$ 0,00', helper: 'Nenhum investimento cadastrado', icon: PiggyBank, tone: 'purple' },
-]
+const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+const today = () => new Date().toISOString().slice(0, 10)
 
 function EmptyState({ icon: Icon, title, description }: { icon: typeof ReceiptText; title: string; description: string }) {
-  return (
-    <div className="empty-state">
-      <div className="empty-state-icon"><Icon size={20} strokeWidth={1.8} /></div>
-      <p className="empty-state-title">{title}</p>
-      <p className="empty-state-description">{description}</p>
-    </div>
-  )
+  return <div className="empty-state"><div className="empty-state-icon"><Icon size={20} strokeWidth={1.8} /></div><p className="empty-state-title">{title}</p><p className="empty-state-description">{description}</p></div>
 }
 
-function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return (
-    <>
-      {open && <button className="sidebar-overlay" aria-label="Fechar menu" onClick={onClose} />}
-      <aside className={`sidebar ${open ? 'sidebar-open' : ''}`}>
-        <div className="brand-row">
-          <div className="brand-mark"><Wallet size={18} strokeWidth={2.2} /></div>
-          <span className="brand-name">Meu Financeiro</span>
-          <button className="mobile-close" aria-label="Fechar menu" onClick={onClose}><X size={19} /></button>
-        </div>
-        <div className="sidebar-label">MENU PRINCIPAL</div>
-        <nav className="nav-list" aria-label="Navegação principal">
-          {navigation.map(({ label, icon: Icon, active }) => (
-            <button key={label} className={`nav-item ${active ? 'nav-item-active' : ''}`} onClick={onClose}>
-              <Icon size={18} strokeWidth={active ? 2.2 : 1.8} />
-              <span>{label}</span>
-              {active && <span className="active-indicator" />}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <button className="nav-item"><Settings2 size={18} /><span>Configurações</span></button>
-          <div className="security-note">
-            <div className="security-dot" />
-            <div><strong>Dados protegidos</strong><span>Acesso privado e seguro</span></div>
-          </div>
-        </div>
-      </aside>
-    </>
-  )
+function Sidebar({ active, onSelect, open, onClose }: { active: string; onSelect: (label: string) => void; open: boolean; onClose: () => void }) {
+  return <><button className="sidebar-overlay" aria-label="Fechar menu" onClick={onClose} /><aside className={`sidebar ${open ? 'sidebar-open' : ''}`}><div className="brand-row"><div className="brand-mark"><Wallet size={18} /></div><span className="brand-name">Meu Financeiro</span><button className="mobile-close" aria-label="Fechar menu" onClick={onClose}><X size={19} /></button></div><div className="sidebar-label">MENU PRINCIPAL</div><nav className="nav-list" aria-label="Navegação principal">{navigation.map(({ label, icon: Icon }) => <button key={label} className={`nav-item ${active === label ? 'nav-item-active' : ''}`} onClick={() => { onSelect(label); onClose() }}><Icon size={18} /><span>{label}</span>{active === label && <span className="active-indicator" />}</button>)}</nav><div className="sidebar-bottom"><button className="nav-item"><Settings2 size={18} /><span>Configurações</span></button><div className="security-note"><div className="security-dot" /><div><strong>Dados protegidos</strong><span>Persistência aguardando autorização</span></div></div></div></aside></>
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="form-field"><span>{label}</span>{children}</label> }
+
+function Dashboard({ accounts, movements, categories, onNavigate }: { accounts: Account[]; movements: Movement[]; categories: Category[]; onNavigate: (label: string) => void }) {
+  const month = new Date().toISOString().slice(0, 7)
+  const current = movements.filter((item) => item.date.startsWith(month))
+  const income = current.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amount, 0)
+  const expense = current.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amount, 0)
+  const balance = accounts.reduce((sum, account) => sum + account.opening, 0) + movements.reduce((sum, item) => sum + (item.type === 'income' ? item.amount : -item.amount), 0)
+  const recent = [...movements].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4)
+  return <>
+    <section className="metrics-grid" aria-label="Resumo financeiro">{[
+      ['Saldo total', money(balance), accounts.length ? `${accounts.length} conta(s) cadastrada(s)` : 'Nenhuma conta cadastrada', Wallet, 'green'],
+      ['Receitas do mês', money(income), income ? 'Valores registrados no período' : 'Nenhuma receita registrada', ArrowUpRight, 'blue'],
+      ['Despesas do mês', money(expense), expense ? 'Valores registrados no período' : 'Nenhuma despesa registrada', ArrowDownLeft, 'orange'],
+      ['Investimentos', money(0), 'Nenhum investimento cadastrado', PiggyBank, 'purple'],
+    ].map(([label, value, helper, Icon, tone]) => <article className="metric-card" key={String(label)}><div className={`metric-icon metric-icon-${tone}`}><Icon size={19} /></div><p className="metric-label">{label}</p><p className="metric-value">{value}</p><p className="metric-helper">{helper}</p></article>)}</section>
+    <section className="content-grid"><article className="panel cashflow-panel"><div className="panel-heading"><div><h2>Fluxo de caixa</h2><p>Receitas e despesas ao longo do tempo</p></div><span className="data-badge">{current.length} movimento(s)</span></div>{current.length ? <div className="summary-bars"><div><span>Receitas</span><strong className="positive">{money(income)}</strong></div><div><span>Despesas</span><strong className="negative">{money(expense)}</strong></div><div><span>Resultado</span><strong>{money(income - expense)}</strong></div></div> : <div className="chart-empty"><div className="chart-illustration"><BarChart3 size={27} /></div><strong>Seu fluxo de caixa aparecerá aqui</strong><span>Adicione lançamentos para acompanhar sua evolução mensal.</span></div>}</article><article className="panel budget-panel"><div className="panel-heading"><div><h2>Orçamento</h2><p>Acompanhe seus limites mensais</p></div></div><EmptyState icon={PiggyBank} title="Nenhum orçamento criado" description="Crie categorias e defina limites para começar." /><button className="outline-button" onClick={() => onNavigate('Categorias')}><Plus size={16} /> Criar categoria</button></article></section>
+    <section className="lower-grid"><article className="panel activity-panel"><div className="panel-heading"><div><h2>Movimentações recentes</h2><p>{recent.length ? `${recent.length} lançamento(s) local(is)` : 'Seus últimos lançamentos'}</p></div><button className="link-button" onClick={() => onNavigate('Lançamentos')}>Ver todas <ChevronRight size={14} /></button></div>{recent.length ? <div className="movement-list">{recent.map((item) => <div className="movement-row" key={item.id}><span className={`movement-icon ${item.type}`}><ArrowUpRight size={15} /></span><div><strong>{item.description}</strong><small>{item.date}</small></div><b className={item.type === 'income' ? 'positive' : 'negative'}>{item.type === 'income' ? '+' : '-'} {money(item.amount)}</b></div>)}</div> : <EmptyState icon={ReceiptText} title="Ainda não há movimentações" description="Seus lançamentos aparecerão nesta lista." />}</article><article className="panel due-panel"><div className="panel-heading"><div><h2>Próximos vencimentos</h2><p>Contas e faturas a pagar</p></div><CalendarDays size={19} className="panel-heading-icon" /></div><EmptyState icon={CalendarDays} title="Tudo tranquilo por aqui" description="Você não possui contas ou faturas cadastradas." /></article></section><div className="info-banner"><div className="info-banner-icon"><Flag size={17} /></div><div><strong>Dados locais protegidos</strong><span>{categories.length} categoria(s) e {accounts.length} conta(s) disponíveis nesta sessão.</span></div><button className="banner-button" onClick={() => onNavigate('Contas')}>Cadastrar conta <ChevronRight size={15} /></button></div>
+  </>
+}
+
+function AccountsView({ accounts, setAccounts }: { accounts: Account[]; setAccounts: React.Dispatch<React.SetStateAction<Account[]>> }) {
+  const [name, setName] = useState(''); const [type, setType] = useState('checking'); const [opening, setOpening] = useState(''); const [editing, setEditing] = useState<string | null>(null)
+  const save = (event: React.FormEvent) => { event.preventDefault(); if (!name.trim()) return; const value = Number(opening.replace(',', '.')) || 0; if (editing) setAccounts((items) => items.map((item) => item.id === editing ? { ...item, name: name.trim(), type, opening: value } : item)); else setAccounts((items) => [...items, { id: crypto.randomUUID(), name: name.trim(), type, opening: value }]); setName(''); setOpening(''); setEditing(null) }
+  const edit = (account: Account) => { setEditing(account.id); setName(account.name); setType(account.type); setOpening(String(account.opening)) }
+  return <section className="module-grid"><article className="panel form-panel"><div className="panel-heading"><div><h2>{editing ? 'Editar conta' : 'Nova conta'}</h2><p>Saldo inicial é registrado localmente.</p></div></div><form onSubmit={save}><Field label="Nome"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Conta principal" /></Field><Field label="Tipo"><select value={type} onChange={(e) => setType(e.target.value)}><option value="checking">Conta corrente</option><option value="savings">Poupança</option><option value="cash">Dinheiro</option><option value="credit_card">Cartão</option><option value="investment">Investimento</option><option value="other">Outro</option></select></Field><Field label="Saldo inicial"><input value={opening} onChange={(e) => setOpening(e.target.value)} inputMode="decimal" placeholder="0,00" /></Field><button className="primary-button" type="submit"><Plus size={16} /> {editing ? 'Salvar alterações' : 'Adicionar conta'}</button></form></article><article className="panel"><div className="panel-heading"><div><h2>Minhas contas</h2><p>{accounts.length} conta(s) na sessão</p></div></div>{accounts.length ? <div className="account-list">{accounts.map((account) => <div className="account-row" key={account.id}><span className="account-icon"><Wallet size={17} /></span><div><strong>{account.name}</strong><small>{account.type}</small></div><b>{money(account.opening)}</b><button className="small-button" onClick={() => edit(account)}>Editar</button></div>)}</div> : <EmptyState icon={Wallet} title="Nenhuma conta cadastrada" description="Cadastre uma conta para acompanhar seu saldo." />}</article></section>
+}
+
+function CategoriesView({ categories, setCategories }: { categories: Category[]; setCategories: React.Dispatch<React.SetStateAction<Category[]>> }) {
+  const [name, setName] = useState(''); const [kind, setKind] = useState<Category['kind']>('expense'); const [parentId, setParentId] = useState('')
+  const save = (event: React.FormEvent) => { event.preventDefault(); if (!name.trim()) return; setCategories((items) => [...items, { id: crypto.randomUUID(), name: name.trim(), kind, parentId: parentId || null }]); setName('') }
+  const parents = categories.filter((category) => !category.parentId)
+  return <section className="module-grid"><article className="panel form-panel"><div className="panel-heading"><div><h2>Nova categoria</h2><p>Organize receitas, despesas e subcategorias.</p></div></div><form onSubmit={save}><Field label="Nome"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Alimentação" /></Field><Field label="Tipo"><select value={kind} onChange={(e) => setKind(e.target.value as Category['kind'])}><option value="expense">Despesa</option><option value="income">Receita</option><option value="both">Ambos</option></select></Field><Field label="Subcategoria de"><select value={parentId} onChange={(e) => setParentId(e.target.value)}><option value="">Nenhuma (categoria principal)</option>{parents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><button className="primary-button" type="submit"><Plus size={16} /> Adicionar categoria</button></form></article><article className="panel"><div className="panel-heading"><div><h2>Categorias</h2><p>{categories.length} categoria(s) na sessão</p></div></div>{categories.length ? <div className="category-list">{categories.map((category) => <div className={`category-row ${category.parentId ? 'subcategory' : ''}`} key={category.id}><span className="category-dot" /><div><strong>{category.name}</strong><small>{category.parentId ? 'Subcategoria' : 'Categoria principal'} · {category.kind === 'both' ? 'receitas e despesas' : category.kind === 'income' ? 'receitas' : 'despesas'}</small></div></div>)}</div> : <EmptyState icon={Tags} title="Nenhuma categoria criada" description="Crie categorias para classificar seus lançamentos." />}</article></section>
+}
+
+function MovementsView({ accounts, categories, movements, setMovements }: { accounts: Account[]; categories: Category[]; movements: Movement[]; setMovements: React.Dispatch<React.SetStateAction<Movement[]>> }) {
+  const [type, setType] = useState<Movement['type']>('expense'); const [accountId, setAccountId] = useState(''); const [categoryId, setCategoryId] = useState(''); const [amount, setAmount] = useState(''); const [date, setDate] = useState(today()); const [description, setDescription] = useState(''); const [filter, setFilter] = useState({ type: '', accountId: '', categoryId: '', month: '' })
+  const save = (event: React.FormEvent) => { event.preventDefault(); const value = Number(amount.replace(',', '.')); if (!accountId || !description.trim() || !Number.isFinite(value) || value <= 0) return; setMovements((items) => [...items, { id: crypto.randomUUID(), accountId, categoryId, amount: value, date, description: description.trim(), type }]); setAmount(''); setDescription('') }
+  const filtered = useMemo(() => movements.filter((item) => (!filter.type || item.type === filter.type) && (!filter.accountId || item.accountId === filter.accountId) && (!filter.categoryId || item.categoryId === filter.categoryId) && (!filter.month || item.date.startsWith(filter.month))), [movements, filter])
+  return <section className="module-grid"><article className="panel form-panel"><div className="panel-heading"><div><h2>Novo lançamento</h2><p>Receitas e despesas ficam disponíveis nesta sessão.</p></div></div><form onSubmit={save}><Field label="Tipo"><select value={type} onChange={(e) => setType(e.target.value as Movement['type'])}><option value="expense">Despesa</option><option value="income">Receita</option></select></Field><Field label="Conta"><select value={accountId} onChange={(e) => setAccountId(e.target.value)}><option value="">Selecione uma conta</option>{accounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Categoria"><select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}><option value="">Selecione uma categoria</option>{categories.filter((item) => item.kind === 'both' || item.kind === type).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><div className="field-row"><Field label="Valor"><input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0,00" /></Field><Field label="Data"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field></div><Field label="Descrição"><input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex.: Mercado" /></Field><button className="primary-button" type="submit"><Plus size={16} /> Registrar lançamento</button></form></article><article className="panel"><div className="panel-heading"><div><h2>Receitas e despesas</h2><p>{filtered.length} resultado(s) local(is)</p></div></div><div className="filter-grid"><input type="month" aria-label="Filtrar por período" value={filter.month} onChange={(e) => setFilter({ ...filter, month: e.target.value })} /><select aria-label="Filtrar por conta" value={filter.accountId} onChange={(e) => setFilter({ ...filter, accountId: e.target.value })}><option value="">Todas as contas</option>{accounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select aria-label="Filtrar por categoria" value={filter.categoryId} onChange={(e) => setFilter({ ...filter, categoryId: e.target.value })}><option value="">Todas as categorias</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select aria-label="Filtrar por tipo" value={filter.type} onChange={(e) => setFilter({ ...filter, type: e.target.value })}><option value="">Todos os tipos</option><option value="income">Receitas</option><option value="expense">Despesas</option></select></div>{filtered.length ? <div className="movement-list">{filtered.sort((a, b) => b.date.localeCompare(a.date)).map((item) => <div className="movement-row" key={item.id}><span className={`movement-icon ${item.type}`}>{item.type === 'income' ? <ArrowUpRight size={15} /> : <ArrowDownLeft size={15} />}</span><div><strong>{item.description}</strong><small>{item.date} · {accounts.find((account) => account.id === item.accountId)?.name || 'Conta'}</small></div><b className={item.type === 'income' ? 'positive' : 'negative'}>{item.type === 'income' ? '+' : '-'} {money(item.amount)}</b></div>)}</div> : <EmptyState icon={ReceiptText} title="Nenhum lançamento encontrado" description="Ajuste os filtros ou registre o primeiro lançamento." />}</article></section>
 }
 
 export default function FinanceDashboard() {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const today = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
-  const formattedToday = today.charAt(0).toUpperCase() + today.slice(1)
-
-  return (
-    <div className="finance-app">
-      <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
-      <main className="main-content">
-        <header className="topbar">
-          <button className="mobile-menu" aria-label="Abrir menu" onClick={() => setMenuOpen(true)}><Menu size={21} /></button>
-          <div className="breadcrumb"><span>Visão geral</span><ChevronRight size={14} /><strong>Dashboard</strong></div>
-          <div className="topbar-actions">
-            <button className="icon-button" aria-label="Notificações"><Bell size={19} /><span className="notification-dot" /></button>
-            <div className="avatar" aria-label="Perfil de usuário">EU</div>
-          </div>
-        </header>
-        <div className="page-wrapper">
-          <section className="welcome-row">
-            <div><p className="eyebrow">{formattedToday}</p><h1>Olá, seja bem-vindo.</h1><p className="welcome-copy">Tenha uma visão clara e tranquila das suas finanças.</p></div>
-            <button className="primary-button"><Plus size={17} /> Adicionar lançamento</button>
-          </section>
-
-          <section className="metrics-grid" aria-label="Resumo financeiro">
-            {metrics.map(({ label, value, helper, icon: Icon, tone }) => (
-              <article className="metric-card" key={label}>
-                <div className={`metric-icon metric-icon-${tone}`}><Icon size={19} /></div>
-                <p className="metric-label">{label}</p><p className="metric-value">{value}</p><p className="metric-helper">{helper}</p>
-              </article>
-            ))}
-          </section>
-
-          <section className="content-grid">
-            <article className="panel cashflow-panel">
-              <div className="panel-heading"><div><h2>Fluxo de caixa</h2><p>Receitas e despesas ao longo do tempo</p></div><button className="select-button">Este mês <ChevronRight size={14} /></button></div>
-              <div className="chart-empty"><div className="chart-illustration"><BarChart3 size={27} /></div><strong>Seu fluxo de caixa aparecerá aqui</strong><span>Adicione lançamentos para acompanhar sua evolução mensal.</span><button className="text-button">Adicionar primeiro lançamento <ArrowUpRight size={15} /></button></div>
-            </article>
-            <article className="panel budget-panel">
-              <div className="panel-heading"><div><h2>Orçamento</h2><p>Acompanhe seus limites mensais</p></div><button className="more-button" aria-label="Mais opções">•••</button></div>
-              <EmptyState icon={PiggyBank} title="Nenhum orçamento criado" description="Crie categorias e defina limites para começar." />
-              <button className="outline-button"><Plus size={16} /> Criar orçamento</button>
-            </article>
-          </section>
-
-          <section className="lower-grid">
-            <article className="panel activity-panel"><div className="panel-heading"><div><h2>Movimentações recentes</h2><p>Seus últimos lançamentos</p></div><button className="link-button">Ver todas <ChevronRight size={14} /></button></div><EmptyState icon={ReceiptText} title="Ainda não há movimentações" description="Seus lançamentos aparecerão nesta lista." /></article>
-            <article className="panel due-panel"><div className="panel-heading"><div><h2>Próximos vencimentos</h2><p>Contas e faturas a pagar</p></div><CalendarDays size={19} className="panel-heading-icon" /></div><EmptyState icon={CalendarDays} title="Tudo tranquilo por aqui" description="Você não possui contas ou faturas cadastradas." /></article>
-          </section>
-
-          <div className="info-banner"><div className="info-banner-icon"><Flag size={17} /></div><div><strong>Comece organizando suas finanças</strong><span>Cadastre sua primeira conta para acompanhar seu saldo em um só lugar.</span></div><button className="banner-button">Cadastrar conta <ChevronRight size={15} /></button></div>
-          <p className="demo-note">Tela inicial sem dados financeiros. Informações serão exibidas após o cadastro.</p>
-        </div>
-      </main>
-    </div>
-  )
+  const [menuOpen, setMenuOpen] = useState(false); const [active, setActive] = useState('Visão geral')
+  const [accounts, setAccounts] = useState<Account[]>([]); const [categories, setCategories] = useState<Category[]>([]); const [movements, setMovements] = useState<Movement[]>([])
+  const formattedToday = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
+  const select = (label: string) => setActive(label)
+  const view = active === 'Contas' ? <AccountsView accounts={accounts} setAccounts={setAccounts} /> : active === 'Categorias' ? <CategoriesView categories={categories} setCategories={setCategories} /> : active === 'Lançamentos' ? <MovementsView accounts={accounts} categories={categories} movements={movements} setMovements={setMovements} /> : <Dashboard accounts={accounts} movements={movements} categories={categories} onNavigate={select} />
+  return <div className="finance-app"><Sidebar active={active} onSelect={select} open={menuOpen} onClose={() => setMenuOpen(false)} /><main className="main-content"><header className="topbar"><button className="mobile-menu" aria-label="Abrir menu" onClick={() => setMenuOpen(true)}><Menu size={21} /></button><div className="breadcrumb"><span>Meu Financeiro</span><ChevronRight size={14} /><strong>{active}</strong></div><div className="topbar-actions"><button className="icon-button" aria-label="Notificações"><Bell size={19} /><span className="notification-dot" /></button><div className="avatar" aria-label="Perfil de usuário">EU</div></div></header><div className="page-wrapper"><section className="welcome-row"><div><p className="eyebrow">{formattedToday.charAt(0).toUpperCase() + formattedToday.slice(1)}</p><h1>{active === 'Visão geral' ? 'Olá, seja bem-vindo.' : active}</h1><p className="welcome-copy">Tenha uma visão clara e tranquila das suas finanças.</p></div>{active !== 'Visão geral' && <button className="primary-button" onClick={() => setActive(active === 'Contas' ? 'Contas' : active === 'Categorias' ? 'Categorias' : 'Lançamentos')}><Plus size={17} /> Adicionar</button>}</section>{view}<p className="demo-note">Sessão local: gravações reais permanecem bloqueadas até a autorização server-side.</p></div></main></div>
 }

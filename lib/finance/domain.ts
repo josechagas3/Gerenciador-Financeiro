@@ -1,0 +1,110 @@
+export type MoneyCents = bigint
+export type MoneyInput = string | number | bigint
+
+export type AccountType = 'checking' | 'savings' | 'cash' | 'credit_card' | 'investment'
+export type EntryType = 'income' | 'expense' | 'transfer' | 'opening' | 'refund' | 'adjustment'
+export type EntryStatus = 'pending' | 'posted' | 'cancelled'
+
+export interface Account {
+  id: string
+  name: string
+  type: AccountType
+  currency: string
+  isActive: boolean
+}
+
+export interface Category {
+  id: string
+  name: string
+  kind: 'income' | 'expense'
+  parentId: string | null
+  isActive: boolean
+}
+
+export interface FinancialEntry {
+  id: string
+  accountId: string
+  categoryId: string | null
+  type: EntryType
+  status: EntryStatus
+  amountCents: MoneyCents
+  effectiveOn: string
+  description: string
+  transferGroupId: string | null
+  idempotencyKey: string
+}
+
+export interface CardInvoice {
+  id: string
+  accountId: string
+  referenceMonth: string
+  dueOn: string
+  totalCents: MoneyCents
+  paidCents: MoneyCents
+  status: 'open' | 'partially_paid' | 'paid' | 'cancelled'
+}
+
+export interface Debt {
+  id: string
+  name: string
+  principalCents: MoneyCents
+  outstandingCents: MoneyCents
+  dueOn: string | null
+  status: 'open' | 'settled' | 'cancelled'
+}
+
+export interface Investment {
+  id: string
+  name: string
+  accountId: string
+  investedCents: MoneyCents
+  currentValueCents: MoneyCents
+  asOf: string
+}
+
+export interface FinanceSummary {
+  balanceCents: MoneyCents
+  incomeCents: MoneyCents
+  expenseCents: MoneyCents
+  investmentCents: MoneyCents
+}
+
+export function parseMoneyCents(value: MoneyInput): MoneyCents {
+  if (typeof value === 'bigint') return value
+  const normalized = String(value).trim().replace(',', '.')
+  if (!/^-?\d+(?:\.\d{1,2})?$/.test(normalized)) throw new Error('Valor monetário inválido.')
+  const negative = normalized.startsWith('-')
+  const unsigned = negative ? normalized.slice(1) : normalized
+  const [whole, fraction = ''] = unsigned.split('.')
+  const cents = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'))
+  return negative ? -cents : cents
+}
+
+export function formatMoneyCents(value: MoneyCents, currency = 'BRL'): string {
+  const negative = value < 0n
+  const absolute = negative ? -value : value
+  const whole = absolute / 100n
+  const cents = String(absolute % 100n).padStart(2, '0')
+  const groupedWhole = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  const symbol = new Intl.NumberFormat('pt-BR', { style: 'currency', currency })
+    .formatToParts(0)
+    .find((part) => part.type === 'currency')?.value ?? currency
+  return `${negative ? '-' : ''}${symbol} ${groupedWhole},${cents}`
+}
+
+export function summarizeEntries(entries: Pick<FinancialEntry, 'type' | 'status' | 'amountCents'>): FinanceSummary {
+  let balanceCents = 0n
+  let incomeCents = 0n
+  let expenseCents = 0n
+  for (const entry of entries) {
+    if (entry.status !== 'posted') continue
+    if (entry.type === 'income' || entry.type === 'refund') {
+      incomeCents += entry.amountCents
+      balanceCents += entry.amountCents
+    } else if (entry.type === 'expense') {
+      expenseCents += entry.amountCents
+      balanceCents -= entry.amountCents
+    }
+  }
+  return { balanceCents, incomeCents, expenseCents, investmentCents: 0n }
+}

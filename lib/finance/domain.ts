@@ -1,8 +1,8 @@
 export type MoneyCents = bigint
 export type MoneyInput = string | number | bigint
 
-export type AccountType = 'checking' | 'savings' | 'cash' | 'credit_card' | 'investment'
-export type EntryType = 'income' | 'expense' | 'transfer' | 'opening' | 'refund' | 'adjustment'
+export type AccountType = 'checking' | 'savings' | 'cash' | 'credit_card' | 'investment' | 'other'
+export type EntryType = 'income' | 'expense' | 'transfer' | 'opening' | 'reversal' | 'adjustment'
 export type EntryStatus = 'pending' | 'posted' | 'cancelled'
 
 export interface Account {
@@ -98,7 +98,7 @@ export function summarizeEntries(entries: Pick<FinancialEntry, 'type' | 'status'
   let expenseCents = 0n
   for (const entry of entries) {
     if (entry.status !== 'posted') continue
-    if (entry.type === 'income' || entry.type === 'refund') {
+    if (entry.type === 'income' || entry.type === 'reversal') {
       incomeCents += entry.amountCents
       balanceCents += entry.amountCents
     } else if (entry.type === 'expense') {

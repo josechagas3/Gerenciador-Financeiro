@@ -17,7 +17,7 @@ export function requireDate(value: unknown, field: string): string {
 
 export function validateEntryInput(input: Record<string, unknown>) {
   const type = requireText(input.type, 'Tipo') as EntryType
-  if (!['income', 'expense', 'transfer', 'opening', 'refund', 'adjustment'].includes(type)) {
+  if (!['income', 'expense', 'transfer', 'opening', 'reversal', 'adjustment'].includes(type)) {
     throw new Error('Tipo de lançamento inválido.')
   }
   const amountCents = parseMoneyCents(input.amountCents as MoneyInput)

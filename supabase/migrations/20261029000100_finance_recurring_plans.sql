@@ -117,6 +117,133 @@ for all to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
+create or replace function finance.realize_recurring_occurrence(
+  p_occurrence_id uuid,
+  p_operation_key text,
+  p_request_hash text
+)
+returns table (occurrence_id uuid, transaction_id uuid, status text)
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_occurrence finance.recurring_occurrences;
+  v_plan finance.recurring_plans;
+  v_existing finance.idempotency_keys;
+  v_transaction_id uuid;
+begin
+  if v_user_id is null then
+    raise exception 'authentication required' using errcode = '42501';
+  end if;
+  if p_occurrence_id is null
+     or length(trim(coalesce(p_operation_key, ''))) < 16
+     or length(trim(coalesce(p_request_hash, ''))) < 16 then
+    raise exception 'invalid recurring operation';
+  end if;
+
+  select * into v_occurrence
+  from finance.recurring_occurrences
+  where id = p_occurrence_id and user_id = v_user_id
+  for update;
+
+  if not found then
+    raise exception 'recurring occurrence not found' using errcode = 'P0002';
+  end if;
+
+  select * into v_existing
+  from finance.idempotency_keys
+  where key = p_operation_key and user_id = v_user_id
+  for update;
+
+  if found then
+    if v_existing.request_hash <> p_request_hash then
+      raise exception 'idempotency key was reused with a different request';
+    end if;
+    if v_occurrence.status = 'realized' then
+      return query select v_occurrence.id, v_occurrence.transaction_id, v_occurrence.status;
+      return;
+    end if;
+    raise exception 'idempotency operation is already in progress' using errcode = '55P03';
+  end if;
+
+  if v_occurrence.status = 'cancelled' then
+    raise exception 'cancelled recurring occurrence cannot be realized' using errcode = '55000';
+  end if;
+
+  if v_occurrence.status = 'realized' then
+    return query select v_occurrence.id, v_occurrence.transaction_id, v_occurrence.status;
+    return;
+  end if;
+
+  select * into v_plan
+  from finance.recurring_plans
+  where id = v_occurrence.plan_id and user_id = v_user_id
+  for update;
+
+  if not found or not v_plan.is_active then
+    raise exception 'inactive recurring plan cannot be realized' using errcode = '55000';
+  end if;
+  if v_occurrence.amount_cents <> v_plan.amount_cents then
+    raise exception 'recurring occurrence amount does not match its plan';
+  end if;
+  if v_occurrence.period < date_trunc('month', v_plan.starts_on)::date
+     or (v_plan.ends_on is not null and v_occurrence.period > date_trunc('month', v_plan.ends_on)::date) then
+    raise exception 'recurring occurrence is outside the plan period';
+  end if;
+
+  insert into finance.idempotency_keys (key, user_id, operation, request_hash)
+  values (p_operation_key, v_user_id, 'recurring_occurrence_realization', p_request_hash);
+
+  insert into finance.transactions (
+    user_id,
+    account_id,
+    category_id,
+    transaction_type,
+    status,
+    amount_cents,
+    entry_sign,
+    occurred_at,
+    description,
+    operation_key
+  )
+  values (
+    v_user_id,
+    v_plan.account_id,
+    v_plan.category_id,
+    v_plan.plan_type,
+    'posted',
+    v_occurrence.amount_cents,
+    case when v_plan.plan_type = 'income' then 1 else -1 end,
+    v_occurrence.due_on::timestamptz,
+    v_plan.description,
+    p_operation_key
+  )
+  returning id into v_transaction_id;
+
+  update finance.recurring_occurrences
+  set status = 'realized',
+      transaction_id = v_transaction_id,
+      realized_at = now()
+  where id = v_occurrence.id and user_id = v_user_id;
+
+  update finance.idempotency_keys
+  set response_status = 200,
+      response_body = jsonb_build_object(
+        'occurrence_id', v_occurrence.id,
+        'transaction_id', v_transaction_id,
+        'status', 'realized'
+      ),
+      completed_at = now()
+  where key = p_operation_key and user_id = v_user_id;
+
+  return query select v_occurrence.id, v_transaction_id, 'realized'::text;
+end;
+$$;
+
+revoke execute on function finance.realize_recurring_occurrence(uuid, text, text) from public, anon;
+grant execute on function finance.realize_recurring_occurrence(uuid, text, text) to authenticated;
 revoke execute on function finance.audit_financial_change() from public, anon, authenticated;
 revoke execute on function finance.touch_updated_at() from public, anon, authenticated;
 

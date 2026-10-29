@@ -65,6 +65,8 @@ function mapOccurrence(row: Row): RecurringOccurrence {
   }
 }
 
+const RECURRING_WRITES_ENABLED = false
+
 function writesBlocked(): never {
   throw new FinancePersistenceError('A persistência de recorrências está bloqueada até a revisão e aplicação da migration.', 503)
 }
@@ -105,7 +107,16 @@ export async function createRecurringServerRepository() {
     createPlan: async (_input: Row) => writesBlocked(),
     updatePlan: async (_id: unknown, _input: Row) => writesBlocked(),
     cancelPlan: async (_id: unknown) => writesBlocked(),
-    realizeOccurrence: async (_id: unknown) => writesBlocked(),
+    realizeOccurrence: async (occurrenceId: unknown, operationKey?: unknown, requestHash?: unknown) => {
+      if (!RECURRING_WRITES_ENABLED) writesBlocked()
+      const { data, error } = await db.rpc('realize_recurring_occurrence', {
+        p_occurrence_id: String(occurrenceId),
+        p_operation_key: String(operationKey),
+        p_request_hash: String(requestHash),
+      })
+      if (error) throw new FinancePersistenceError('Não foi possível confirmar a ocorrência recorrente.', 409)
+      return data?.[0] ?? null
+    },
     cancelOccurrence: async (_id: unknown) => writesBlocked(),
   }
 }

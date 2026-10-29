@@ -11,12 +11,13 @@ export interface Account {
   type: AccountType
   currency: string
   isActive: boolean
+  balanceCents: MoneyCents
 }
 
 export interface Category {
   id: string
   name: string
-  kind: 'income' | 'expense'
+  kind: 'income' | 'expense' | 'both'
   parentId: string | null
   isActive: boolean
 }

@@ -25,7 +25,7 @@ function asMoney(value: unknown): MoneyCents {
 }
 
 function mapAccount(row: Row): Account {
-  return { id: String(row.id), name: String(row.name), type: row.account_type as Account['type'], currency: String(row.currency_code).trim(), isActive: Boolean(row.is_active) }
+  return { id: String(row.id), name: String(row.name), type: row.account_type as Account['type'], currency: String(row.currency_code).trim(), isActive: Boolean(row.is_active), balanceCents: 0n }
 }
 
 function mapCategory(row: Row): Category {
@@ -83,7 +83,13 @@ export async function createFinanceServerRepository() {
   }
   async function snapshot(): Promise<FinanceSnapshot> {
     const [accounts, categories, movements] = await Promise.all([listAccounts(), listCategories(), listMovements()])
-    return { accounts, categories, movements }
+    const balances = new Map<string, bigint>()
+    for (const movement of movements) {
+      if (movement.status !== 'posted') continue
+      const signedAmount = movement.type === 'expense' ? -movement.amountCents : movement.amountCents
+      balances.set(movement.accountId, (balances.get(movement.accountId) ?? 0n) + signedAmount)
+    }
+    return { accounts: accounts.map((account) => ({ ...account, balanceCents: balances.get(account.id) ?? 0n })), categories, movements }
   }
   async function createAccount(input: Row) {
     const name = requireText(input.name, 'Nome da conta', 120)
@@ -153,7 +159,8 @@ export async function createFinanceServerRepository() {
     const originalId = requireText(id, 'Lançamento', 80); const original = await db.from('transactions').select('id,account_id,category_id,transaction_type,status,amount_cents,occurred_at,description,operation_key').eq('id', originalId).eq('user_id', user.id).single()
     await throwIfError(original, 'Não foi possível localizar o lançamento.')
     const row = original.data as Row
-    return createEntry({ accountId: row.account_id, categoryId: row.category_id, type: 'reversal', amountCents: asMoney(row.amount_cents).toString(), effectiveOn: new Date().toISOString().slice(0, 10), description: `Estorno: ${row.description}`, idempotencyKey: `reversal:${originalId}`, originalTransactionId: originalId })
+    if (row.status !== 'posted' || !['income', 'expense'].includes(String(row.transaction_type))) throw new FinancePersistenceError('Somente receitas e despesas publicadas podem ser estornadas.')
+    return createEntry({ accountId: row.account_id, categoryId: row.category_id, type: row.transaction_type === 'expense' ? 'income' : 'expense', amountCents: asMoney(row.amount_cents).toString(), effectiveOn: new Date().toISOString().slice(0, 10), description: `Estorno: ${row.description}`, idempotencyKey: `reversal:${originalId}`, originalTransactionId: originalId })
   }
   return { user, snapshot, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
 }

@@ -5,11 +5,14 @@ import useSWR from 'swr'
 import { ArrowDownLeft, ArrowUpRight, BarChart3, Bell, BookOpen, BriefcaseBusiness, CalendarDays, ChevronRight, CreditCard, FileText, Flag, LayoutDashboard, Menu, PiggyBank, Plus, ReceiptText, Settings2, Tags, Target, Wallet, X } from 'lucide-react'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { RecurringPlans } from '@/components/recurring-plans'
+import { CardsView, InvoicesView } from '@/components/cards-and-invoices'
 
 type Account = { id: string; name: string; type: string; currency: string; isActive: boolean; balanceCents: string }
 type Category = { id: string; name: string; parentId: string | null; kind: 'income' | 'expense' | 'both'; isActive: boolean }
 type Movement = { id: string; accountId: string; categoryId: string | null; type: string; status: string; amountCents: string; effectiveOn: string; description: string; transferGroupId: string | null; idempotencyKey: string }
-type Snapshot = { accounts: Account[]; categories: Category[]; movements: Movement[] }
+type Card = { id: string; accountId: string; name: string; brand: string; creditLimitCents: string; usedCents: string; availableCents: string; closingDay: number; dueDay: number }
+type Invoice = { id: string; accountId: string; periodStart: string; periodEnd: string; dueOn: string; totalCents: string; paidCents: string; status: string; items: Array<{ id: string; transactionId: string; description: string; occurredOn: string; totalCents: string }> }
+type Snapshot = { accounts: Account[]; categories: Category[]; movements: Movement[]; cards: Card[]; invoices: Invoice[] }
 type Resource = 'accounts' | 'categories' | 'transactions'
 
 const navigation = [
@@ -81,6 +84,6 @@ export default function FinanceDashboard() {
   const refresh = () => mutate(); const logout = async () => { await createSupabaseClient().auth.signOut(); window.location.assign('/auth/login') }
   if (error) return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Meu Financeiro</p><h1>Não foi possível carregar seus dados</h1><p className="auth-error">{error.message}</p><button className="primary-button" onClick={() => mutate()}>Tentar novamente</button></section></main>
   if (!data) return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Meu Financeiro</p><h1>Carregando dados seguros...</h1></section></main>
-  const view = active === 'Visão geral' ? <Dashboard snapshot={data} onNavigate={setActive} /> : active === 'Contas' ? <AccountsView snapshot={data} refresh={refresh} /> : active === 'Categorias' ? <CategoriesView snapshot={data} refresh={refresh} /> : active === 'Lançamentos' ? <MovementsView snapshot={data} refresh={refresh} /> : active === 'Planejamento' ? <RecurringPlans accounts={data.accounts} categories={data.categories} refresh={refresh} /> : <ModuleStatusView module={active} />
+  const view = active === 'Visão geral' ? <Dashboard snapshot={data} onNavigate={setActive} /> : active === 'Contas' ? <AccountsView snapshot={data} refresh={refresh} /> : active === 'Categorias' ? <CategoriesView snapshot={data} refresh={refresh} /> : active === 'Lançamentos' ? <MovementsView snapshot={data} refresh={refresh} /> : active === 'Planejamento' ? <RecurringPlans accounts={data.accounts} categories={data.categories} refresh={refresh} /> : active === 'Cartões' ? <CardsView snapshot={data} refresh={refresh} /> : active === 'Faturas' ? <InvoicesView snapshot={data} /> : <ModuleStatusView module={active} />
   return <div className="finance-app"><Sidebar active={active} onSelect={setActive} open={menuOpen} onClose={() => setMenuOpen(false)} /><main className="main-content"><header className="topbar"><button className="mobile-menu" aria-label="Abrir menu" onClick={() => setMenuOpen(true)}><Menu size={21} /></button><div className="breadcrumb"><span>Meu Financeiro</span><ChevronRight size={14} /><strong>{active}</strong></div><div className="topbar-actions"><button className="icon-button" aria-label="Notificações"><Bell size={19} /><span className="notification-dot" /></button><button className="logout-button" onClick={logout}>Sair</button><div className="avatar" aria-label="Perfil de usuário">EU</div></div></header><div className="page-wrapper"><section className="welcome-row"><div><p className="eyebrow">Dados persistidos com segurança</p><h1>{active === 'Visão geral' ? 'Olá, seja bem-vindo.' : active}</h1><p className="welcome-copy">Tenha uma visão clara e tranquila das suas finanças.</p></div>{active !== 'Visão geral' && <button className="primary-button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}><Plus size={17} /> Adicionar</button>}</section>{view}</div></main></div>
 }

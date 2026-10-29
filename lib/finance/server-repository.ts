@@ -9,10 +9,37 @@ export class FinancePersistenceError extends Error {
   }
 }
 
+export type FinanceCard = {
+  id: string
+  accountId: string
+  name: string
+  brand: string
+  creditLimitCents: MoneyCents
+  usedCents: MoneyCents
+  availableCents: MoneyCents
+  closingDay: number
+  dueDay: number
+}
+
+export type FinanceInvoice = {
+  id: string
+  cardId: string | null
+  accountId: string
+  periodStart: string
+  periodEnd: string
+  dueOn: string
+  totalCents: MoneyCents
+  paidCents: MoneyCents
+  status: string
+  items: Array<{ id: string; transactionId: string; description: string; occurredOn: string; totalCents: MoneyCents }>
+}
+
 export type FinanceSnapshot = {
   accounts: Account[]
   categories: Category[]
   movements: FinancialEntry[]
+  cards: FinanceCard[]
+  invoices: FinanceInvoice[]
 }
 
 type Row = Record<string, unknown>
@@ -81,15 +108,76 @@ export async function createFinanceServerRepository() {
     if (error) throw new FinancePersistenceError('Não foi possível carregar os lançamentos.', 500)
     return (data ?? []).map(mapMovement)
   }
+  async function listCards(): Promise<FinanceCard[]> {
+    const { data: cards, error } = await db.from('credit_cards').select('id,account_id,name,brand,credit_limit_cents,closing_day,due_day').eq('user_id', user.id).order('name')
+    if (error) throw new FinancePersistenceError('Não foi possível carregar os cartões.', 500)
+    const accountIds = (cards ?? []).map((card) => card.account_id)
+    const { data: movements, error: movementsError } = accountIds.length ? await db.from('transactions').select('account_id,transaction_type,status,amount_cents').in('account_id', accountIds).eq('user_id', user.id) : { data: [], error: null }
+    if (movementsError) throw new FinancePersistenceError('Não foi possível calcular o limite utilizado.', 500)
+    const used = new Map<string, bigint>()
+    for (const movement of movements ?? []) {
+      if (movement.status !== 'posted') continue
+      const amount = asMoney(movement.amount_cents)
+      const signed = movement.transaction_type === 'expense' ? amount : movement.transaction_type === 'income' || movement.transaction_type === 'reversal' ? -amount : 0n
+      used.set(movement.account_id, (used.get(movement.account_id) ?? 0n) + signed)
+    }
+    return (cards ?? []).map((card) => {
+      const limit = asMoney(card.credit_limit_cents)
+      const usedCents = used.get(card.account_id) ?? 0n
+      return { id: String(card.id), accountId: String(card.account_id), name: String(card.name), brand: String(card.brand), creditLimitCents: limit, usedCents, availableCents: limit - usedCents, closingDay: Number(card.closing_day), dueDay: Number(card.due_day) }
+    })
+  }
+  async function listInvoices(): Promise<FinanceInvoice[]> {
+    const { data: invoices, error } = await db.from('card_invoices').select('id,account_id,period_start,period_end,due_on,total_cents,status').eq('user_id', user.id).order('due_on', { ascending: false })
+    if (error) throw new FinancePersistenceError('Não foi possível carregar as faturas.', 500)
+    const invoiceIds = (invoices ?? []).map((invoice) => invoice.id)
+    const { data: items, error: itemsError } = invoiceIds.length ? await db.from('card_invoice_items').select('id,invoice_id,transaction_id,total_cents,transactions(description,occurred_at)').eq('user_id', user.id).in('invoice_id', invoiceIds) : { data: [], error: null }
+    if (itemsError) throw new FinancePersistenceError('Não foi possível carregar as compras das faturas.', 500)
+    const { data: payments, error: paymentsError } = invoiceIds.length ? await db.from('card_payments').select('invoice_id,paid_cents').eq('user_id', user.id).in('invoice_id', invoiceIds) : { data: [], error: null }
+    if (paymentsError) throw new FinancePersistenceError('Não foi possível carregar os pagamentos das faturas.', 500)
+    const paid = new Map<string, bigint>()
+    for (const payment of payments ?? []) paid.set(payment.invoice_id, (paid.get(payment.invoice_id) ?? 0n) + asMoney(payment.paid_cents))
+    const cardByAccount = new Map((await db.from('credit_cards').select('id,account_id').eq('user_id', user.id)).data?.map((card) => [card.account_id, String(card.id)]) ?? [])
+    return (invoices ?? []).map((invoice) => ({
+      id: String(invoice.id), cardId: cardByAccount.get(invoice.account_id) ?? null, accountId: String(invoice.account_id), periodStart: String(invoice.period_start), periodEnd: String(invoice.period_end), dueOn: String(invoice.due_on), totalCents: asMoney(invoice.total_cents), paidCents: paid.get(invoice.id) ?? 0n, status: String(invoice.status),
+      items: (items ?? []).filter((item) => item.invoice_id === invoice.id).map((item) => { const transaction = Array.isArray(item.transactions) ? item.transactions[0] : item.transactions as { description?: string; occurred_at?: string } | null; return { id: String(item.id), transactionId: String(item.transaction_id), description: transaction?.description ?? 'Compra no cartão', occurredOn: transaction?.occurred_at ? new Date(transaction.occurred_at).toISOString().slice(0, 10) : '', totalCents: asMoney(item.total_cents) } })
+    }))
+  }
+  async function createCard(input: Row) {
+    const name = requireText(input.name, 'Nome do cartão', 120); const brand = requireText(input.brand, 'Bandeira', 40); const accountId = requireText(input.accountId, 'Conta do cartão', 80); const creditLimitCents = parseMoneyCents(input.creditLimitCents as string | number | bigint); const closingDay = Number(input.closingDay); const dueDay = Number(input.dueDay)
+    if (creditLimitCents <= 0n || !Number.isInteger(closingDay) || closingDay < 1 || closingDay > 31 || !Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) throw new FinancePersistenceError('Limite, fechamento e vencimento inválidos.')
+    const result = await db.from('credit_cards').insert({ name, brand, account_id: accountId, credit_limit_cents: creditLimitCents.toString(), closing_day: closingDay, due_day: dueDay, user_id: user.id }).select('id,account_id,name,brand,credit_limit_cents,closing_day,due_day').single()
+    await throwIfError(result, 'Não foi possível criar o cartão.')
+    return result.data
+  }
+  async function updateCard(id: unknown, input: Row) {
+    const result = await db.from('credit_cards').update({ name: requireText(input.name, 'Nome do cartão', 120), brand: requireText(input.brand, 'Bandeira', 40), credit_limit_cents: parseMoneyCents(input.creditLimitCents as string | number | bigint).toString(), closing_day: Number(input.closingDay), due_day: Number(input.dueDay) }).eq('id', requireText(id, 'Cartão', 80)).eq('user_id', user.id).select('id,account_id,name,brand,credit_limit_cents,closing_day,due_day').single()
+    await throwIfError(result, 'Não foi possível atualizar o cartão.')
+    return result.data
+  }
+  async function deleteCard(id: unknown) {
+    const result = await db.from('credit_cards').delete().eq('id', requireText(id, 'Cartão', 80)).eq('user_id', user.id)
+    await throwIfError(result, 'Não é possível excluir um cartão com faturas ou lançamentos relacionados.')
+  }
+  async function registerInvoicePayment(input: Row) {
+    const invoiceId = requireText(input.invoiceId, 'Fatura', 80); const paymentTransactionId = requireText(input.paymentTransactionId, 'Lançamento do pagamento', 80); const operationKey = requireText(input.operationKey, 'Chave da operação', 200); const paidCents = parseMoneyCents(input.paidCents as string | number | bigint)
+    if (paidCents <= 0n) throw new FinancePersistenceError('O pagamento deve ser maior que zero.')
+    const invoice = await db.from('card_invoices').select('id').eq('id', invoiceId).eq('user_id', user.id).single(); await throwIfError(invoice, 'Não foi possível localizar a fatura.')
+    const transaction = await db.from('transactions').select('id,transaction_type,status').eq('id', paymentTransactionId).eq('user_id', user.id).single(); await throwIfError(transaction, 'Não foi possível localizar o lançamento do pagamento.')
+    if (transaction.data?.status !== 'posted' || transaction.data?.transaction_type !== 'transfer') throw new FinancePersistenceError('O pagamento da fatura deve ser um lançamento de transferência publicado.')
+    const result = await db.from('card_payments').insert({ invoice_id: invoiceId, payment_transaction_id: paymentTransactionId, paid_cents: paidCents.toString(), paid_at: new Date().toISOString(), operation_key: operationKey, user_id: user.id }).select('id,invoice_id,payment_transaction_id,paid_cents,paid_at,operation_key').single()
+    await throwIfError(result, 'Não foi possível registrar o pagamento da fatura.')
+    return result.data
+  }
   async function snapshot(): Promise<FinanceSnapshot> {
-    const [accounts, categories, movements] = await Promise.all([listAccounts(), listCategories(), listMovements()])
+    const [accounts, categories, movements, cards, invoices] = await Promise.all([listAccounts(), listCategories(), listMovements(), listCards(), listInvoices()])
     const balances = new Map<string, bigint>()
     for (const movement of movements) {
       if (movement.status !== 'posted') continue
       const signedAmount = movement.type === 'expense' ? -movement.amountCents : movement.amountCents
       balances.set(movement.accountId, (balances.get(movement.accountId) ?? 0n) + signedAmount)
     }
-    return { accounts: accounts.map((account) => ({ ...account, balanceCents: balances.get(account.id) ?? 0n })), categories, movements }
+    return { accounts: accounts.map((account) => ({ ...account, balanceCents: balances.get(account.id) ?? 0n })), categories, movements, cards, invoices }
   }
   async function createAccount(input: Row) {
     const name = requireText(input.name, 'Nome da conta', 120)
@@ -168,5 +256,5 @@ export async function createFinanceServerRepository() {
     if (row.status !== 'posted' || !['income', 'expense'].includes(String(row.transaction_type))) throw new FinancePersistenceError('Somente receitas e despesas publicadas podem ser estornadas.')
     return createEntry({ accountId: row.account_id, categoryId: row.category_id, type: row.transaction_type === 'expense' ? 'income' : 'expense', amountCents: asMoney(row.amount_cents).toString(), effectiveOn: new Date().toISOString().slice(0, 10), description: `Estorno: ${row.description}`, idempotencyKey: `reversal:${originalId}`, originalTransactionId: originalId })
   }
-  return { user, snapshot, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
+  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
 }

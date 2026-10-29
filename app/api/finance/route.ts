@@ -24,7 +24,9 @@ export async function POST(request: Request) {
     const repository = await createFinanceServerRepository()
     const data = body.data ?? {}
     let result: unknown
-    if (body.resource === 'accounts' && body.action === 'create') result = await repository.createAccount(data)
+    if (body.resource === 'cards' && body.action === 'create') result = await repository.createCard(data)
+    else if (body.resource === 'invoices' && body.action === 'register-payment') result = await repository.registerInvoicePayment(data)
+    else if (body.resource === 'accounts' && body.action === 'create') result = await repository.createAccount(data)
     else if (body.resource === 'categories' && body.action === 'create') result = await repository.createCategory(data)
     else if (body.resource === 'transactions' && body.action === 'create') result = await repository.createEntry(data)
     else if (body.resource === 'transactions' && body.action === 'reverse') result = await repository.reverseEntry(body.id)
@@ -39,7 +41,7 @@ export async function PATCH(request: Request) {
     const body = await request.json() as { resource?: string; id?: string; data?: Record<string, unknown> }
     const repository = await createFinanceServerRepository()
     const data = body.data ?? {}
-    const result = body.resource === 'accounts' ? await repository.updateAccount(body.id, data) : body.resource === 'categories' ? await repository.updateCategory(body.id, data) : body.resource === 'transactions' ? await repository.updateEntry(body.id, data) : null
+    const result = body.resource === 'cards' ? await repository.updateCard(body.id, data) : body.resource === 'accounts' ? await repository.updateAccount(body.id, data) : body.resource === 'categories' ? await repository.updateCategory(body.id, data) : body.resource === 'transactions' ? await repository.updateEntry(body.id, data) : null
     if (!result) return NextResponse.json({ error: 'Recurso inválido.' }, { status: 400 })
     return NextResponse.json(jsonData({ result }))
   } catch (error) { return jsonError(error) }
@@ -49,7 +51,8 @@ export async function DELETE(request: Request) {
   try {
     const body = await request.json() as { resource?: string; id?: string }
     const repository = await createFinanceServerRepository()
-    if (body.resource === 'accounts') await repository.deleteAccount(body.id)
+    if (body.resource === 'cards') await repository.deleteCard(body.id)
+    else if (body.resource === 'accounts') await repository.deleteAccount(body.id)
     else if (body.resource === 'categories') await repository.deleteCategory(body.id)
     else return NextResponse.json({ error: 'Recurso inválido.' }, { status: 400 })
     return new NextResponse(null, { status: 204 })

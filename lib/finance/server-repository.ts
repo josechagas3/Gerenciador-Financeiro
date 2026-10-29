@@ -42,7 +42,8 @@ function mapMovement(row: Row): FinancialEntry {
 }
 
 function hashRequest(value: unknown) {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex')
+  const serialized = JSON.stringify(value, (_, item) => typeof item === 'bigint' ? item.toString() : item)
+  return createHash('sha256').update(serialized).digest('hex')
 }
 
 export async function getFinanceAuthContext() {

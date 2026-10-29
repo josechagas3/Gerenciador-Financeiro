@@ -43,11 +43,17 @@ create index if not exists goal_contributions_user_idx on finance.goal_contribut
 
 alter table finance.debts enable row level security; alter table finance.debt_payments enable row level security; alter table finance.investments enable row level security; alter table finance.investment_movements enable row level security; alter table finance.goals enable row level security; alter table finance.goal_contributions enable row level security;
 grant select, insert, update, delete on finance.debts, finance.debt_payments, finance.investments, finance.investment_movements, finance.goals, finance.goal_contributions to authenticated;
+drop policy if exists debts_owner_all on finance.debts;
 create policy debts_owner_all on finance.debts for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+drop policy if exists debt_payments_owner_all on finance.debt_payments;
 create policy debt_payments_owner_all on finance.debt_payments for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+drop policy if exists investments_owner_all on finance.investments;
 create policy investments_owner_all on finance.investments for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+drop policy if exists investment_movements_owner_all on finance.investment_movements;
 create policy investment_movements_owner_all on finance.investment_movements for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+drop policy if exists goals_owner_all on finance.goals;
 create policy goals_owner_all on finance.goals for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+drop policy if exists goal_contributions_owner_all on finance.goal_contributions;
 create policy goal_contributions_owner_all on finance.goal_contributions for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 
 create or replace function finance.apply_debt_payment() returns trigger language plpgsql as $$
@@ -59,6 +65,7 @@ begin
   update finance.debts set balance_cents = current_balance - new.amount_cents, installments_paid = least(installments_total, installments_paid + 1), status = case when current_balance = new.amount_cents then 'paid' else status end, updated_at = now() where id = new.debt_id;
   return new;
 end; $$;
+drop trigger if exists debt_payment_balance_trigger on finance.debt_payments;
 create trigger debt_payment_balance_trigger before insert on finance.debt_payments for each row execute function finance.apply_debt_payment();
 
 commit;

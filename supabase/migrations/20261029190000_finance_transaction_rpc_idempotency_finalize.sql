@@ -26,9 +26,12 @@ BEGIN
     SELECT 1
     FROM pg_proc p
     WHERE p.oid = v_function
-      AND p.proconfig @> ARRAY['search_path=']::text[]
+      AND (
+        p.proconfig @> ARRAY['search_path=""']::text[]
+        OR p.proconfig @> ARRAY['search_path=']::text[]
+      )
   ) THEN
-    RAISE EXCEPTION 'repair aborted: expected empty search_path configuration is missing';
+    RAISE EXCEPTION 'repair aborted: expected empty search_path configuration is missing or unknown';
   END IF;
   IF to_regclass('finance.idempotency_keys') IS NULL
      OR to_regclass('finance.transactions') IS NULL THEN

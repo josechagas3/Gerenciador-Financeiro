@@ -49,7 +49,7 @@ begin
     where ci.id = p_invoice_id
     for update of ci;
   if not found then raise exception 'invoice not found'; end if;
-  if v_invoice.status not in ('open', 'closed') then raise exception 'invoice is not accepting purchases'; end if;
+  if v_invoice.status <> 'open' then raise exception 'invoice is not accepting purchases'; end if;
 
   -- Idempotent replay returns the original item without creating a second expense.
   select t.* into v_transaction from finance.transactions t
@@ -81,10 +81,10 @@ begin
 
   insert into finance.card_invoice_items (
     invoice_id, transaction_id, principal_cents, interest_cents, fee_cents,
-    description, category_id, occurred_on, installment_number, installment_count
+    user_id, description, category_id, occurred_on, installment_number, installment_count
   ) values (
     v_invoice.id, v_transaction.id, p_amount_cents, 0, 0,
-    trim(p_description), p_category_id, p_occurred_on, 1, p_installment_count
+    v_user_id, trim(p_description), p_category_id, p_occurred_on, 1, p_installment_count
   ) returning * into v_item;
 
   update finance.card_invoices

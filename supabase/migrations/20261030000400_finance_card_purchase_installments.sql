@@ -137,16 +137,16 @@ begin
     if found then
       if v_invoice.status <> 'open' then raise exception 'installment % belongs to a non-open invoice', v_index; end if;
     else
-      insert into finance.card_invoices (account_id, period_start, period_end, due_on, total_cents, status)
-      values (v_card.account_id, v_period_start, v_period_end, v_due_on, 0, 'open') returning * into v_invoice;
+      insert into finance.card_invoices (account_id, user_id, period_start, period_end, due_on, total_cents, status)
+      values (v_card.account_id, v_user_id, v_period_start, v_period_end, v_due_on, 0, 'open') returning * into v_invoice;
     end if;
 
     v_installment_key := p_operation_key || ':installment:' || v_index::text;
     v_installment_hash := md5(p_request_hash || ':' || v_index::text);
     select * into v_transaction from finance.create_transaction(v_card.account_id, p_category_id, 'expense', v_installment_amount, p_occurred_on::timestamptz, trim(p_description) || ' (' || v_index || '/' || p_installment_count || ')', v_installment_key, v_installment_hash, null);
 
-    insert into finance.card_invoice_items (invoice_id, transaction_id, principal_cents, interest_cents, fee_cents, description, category_id, occurred_on, card_purchase_id, installment_number, installment_count)
-    values (v_invoice.id, v_transaction.id, v_installment_amount, 0, 0, trim(p_description), p_category_id, p_occurred_on, v_purchase.id, v_index, p_installment_count)
+    insert into finance.card_invoice_items (invoice_id, transaction_id, principal_cents, interest_cents, fee_cents, user_id, description, category_id, occurred_on, card_purchase_id, installment_number, installment_count)
+    values (v_invoice.id, v_transaction.id, v_installment_amount, 0, 0, v_user_id, trim(p_description), p_category_id, p_occurred_on, v_purchase.id, v_index, p_installment_count)
     returning * into v_item;
 
     update finance.card_invoices set total_cents = total_cents + v_item.total_cents, updated_at = now() where id = v_invoice.id;

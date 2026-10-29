@@ -25,7 +25,7 @@ export default function LoginPage() {
         setLoading(false)
         return
       }
-      window.location.assign('/')
+      window.location.replace('/')
     } catch {
       setError('Não foi possível concluir o login. Tente novamente.')
       setLoading(false)

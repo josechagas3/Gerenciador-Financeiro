@@ -12,7 +12,7 @@ type Category = { id: string; name: string; parentId: string | null; kind: 'inco
 type Movement = { id: string; accountId: string; categoryId: string | null; type: string; status: string; amountCents: string; effectiveOn: string; description: string; transferGroupId: string | null; idempotencyKey: string }
 type Card = { id: string; accountId: string; name: string; brand: string; creditLimitCents: string; usedCents: string; availableCents: string; closingDay: number; dueDay: number }
 type Invoice = { id: string; accountId: string; periodStart: string; periodEnd: string; dueOn: string; totalCents: string; paidCents: string; status: string; items: Array<{ id: string; transactionId: string; description: string; occurredOn: string; totalCents: string }> }
-type Snapshot = { accounts: Account[]; categories: Category[]; movements: Movement[]; cards: Card[]; invoices: Invoice[] }
+type Snapshot = { accounts: Account[]; categories: Category[]; movements: Movement[]; cards: Card[]; invoices: Invoice[]; cardsAvailable: boolean }
 type Resource = 'accounts' | 'categories' | 'transactions'
 
 const navigation = [

@@ -40,6 +40,7 @@ export type FinanceSnapshot = {
   movements: FinancialEntry[]
   cards: FinanceCard[]
   invoices: FinanceInvoice[]
+  cardsAvailable: boolean
 }
 
 type Row = Record<string, unknown>
@@ -87,6 +88,10 @@ async function throwIfError(result: { error: { code?: string; message: string } 
   throw new FinancePersistenceError(result.error.code === '23503' ? 'Não é possível excluir este registro porque ele possui lançamentos relacionados.' : fallback, status)
 }
 
+function isMissingCreditCardsTable(error: { code?: string; message?: string } | null) {
+  return error?.code === '42P01' || error?.code === 'PGRST205' || /credit_cards.*(does not exist|not found)|relation .*credit_cards/i.test(error?.message ?? '')
+}
+
 export async function createFinanceServerRepository() {
   const context = await getFinanceAuthContext()
   if (!context.user) throw new FinancePersistenceError('Autenticação necessária.', 401)
@@ -108,8 +113,9 @@ export async function createFinanceServerRepository() {
     if (error) throw new FinancePersistenceError('Não foi possível carregar os lançamentos.', 500)
     return (data ?? []).map(mapMovement)
   }
-  async function listCards(): Promise<FinanceCard[]> {
+  async function listCards(): Promise<{ cards: FinanceCard[]; available: boolean }> {
     const { data: cards, error } = await db.from('credit_cards').select('id,account_id,name,brand,credit_limit_cents,closing_day,due_day').eq('user_id', user.id).order('name')
+    if (error && isMissingCreditCardsTable(error)) return { cards: [], available: false }
     if (error) throw new FinancePersistenceError('Não foi possível carregar os cartões.', 500)
     const accountIds = (cards ?? []).map((card) => card.account_id)
     const { data: movements, error: movementsError } = accountIds.length ? await db.from('transactions').select('account_id,transaction_type,status,amount_cents').in('account_id', accountIds).eq('user_id', user.id) : { data: [], error: null }
@@ -121,11 +127,12 @@ export async function createFinanceServerRepository() {
       const signed = movement.transaction_type === 'expense' ? amount : movement.transaction_type === 'income' || movement.transaction_type === 'reversal' ? -amount : 0n
       used.set(movement.account_id, (used.get(movement.account_id) ?? 0n) + signed)
     }
-    return (cards ?? []).map((card) => {
+    return { available: true, cards: (cards ?? []).map((card) => {
       const limit = asMoney(card.credit_limit_cents)
       const usedCents = used.get(card.account_id) ?? 0n
+
       return { id: String(card.id), accountId: String(card.account_id), name: String(card.name), brand: String(card.brand), creditLimitCents: limit, usedCents, availableCents: limit - usedCents, closingDay: Number(card.closing_day), dueDay: Number(card.due_day) }
-    })
+    }) }
   }
   async function listInvoices(): Promise<FinanceInvoice[]> {
     const { data: invoices, error } = await db.from('card_invoices').select('id,account_id,period_start,period_end,due_on,total_cents,status').eq('user_id', user.id).order('due_on', { ascending: false })
@@ -137,7 +144,9 @@ export async function createFinanceServerRepository() {
     if (paymentsError) throw new FinancePersistenceError('Não foi possível carregar os pagamentos das faturas.', 500)
     const paid = new Map<string, bigint>()
     for (const payment of payments ?? []) paid.set(payment.invoice_id, (paid.get(payment.invoice_id) ?? 0n) + asMoney(payment.paid_cents))
-    const cardByAccount = new Map((await db.from('credit_cards').select('id,account_id').eq('user_id', user.id)).data?.map((card) => [card.account_id, String(card.id)]) ?? [])
+    const cardLookup = await db.from('credit_cards').select('id,account_id').eq('user_id', user.id)
+    if (cardLookup.error && !isMissingCreditCardsTable(cardLookup.error)) throw new FinancePersistenceError('Não foi possível relacionar as faturas aos cartões.', 500)
+    const cardByAccount = new Map((cardLookup.data ?? []).map((card) => [card.account_id, String(card.id)]))
     return (invoices ?? []).map((invoice) => ({
       id: String(invoice.id), cardId: cardByAccount.get(invoice.account_id) ?? null, accountId: String(invoice.account_id), periodStart: String(invoice.period_start), periodEnd: String(invoice.period_end), dueOn: String(invoice.due_on), totalCents: asMoney(invoice.total_cents), paidCents: paid.get(invoice.id) ?? 0n, status: String(invoice.status),
       items: (items ?? []).filter((item) => item.invoice_id === invoice.id).map((item) => { const transaction = Array.isArray(item.transactions) ? item.transactions[0] : item.transactions as { description?: string; occurred_at?: string } | null; return { id: String(item.id), transactionId: String(item.transaction_id), description: transaction?.description ?? 'Compra no cartão', occurredOn: transaction?.occurred_at ? new Date(transaction.occurred_at).toISOString().slice(0, 10) : '', totalCents: asMoney(item.total_cents) } })
@@ -170,14 +179,15 @@ export async function createFinanceServerRepository() {
     return result.data
   }
   async function snapshot(): Promise<FinanceSnapshot> {
-    const [accounts, categories, movements, cards, invoices] = await Promise.all([listAccounts(), listCategories(), listMovements(), listCards(), listInvoices()])
+    const [accounts, categories, movements, cardResult, invoices] = await Promise.all([listAccounts(), listCategories(), listMovements(), listCards(), listInvoices()])
+    const cards = cardResult.cards
     const balances = new Map<string, bigint>()
     for (const movement of movements) {
       if (movement.status !== 'posted') continue
       const signedAmount = movement.type === 'expense' ? -movement.amountCents : movement.amountCents
       balances.set(movement.accountId, (balances.get(movement.accountId) ?? 0n) + signedAmount)
     }
-    return { accounts: accounts.map((account) => ({ ...account, balanceCents: balances.get(account.id) ?? 0n })), categories, movements, cards, invoices }
+    return { accounts: accounts.map((account) => ({ ...account, balanceCents: balances.get(account.id) ?? 0n })), categories, movements, cards, invoices, cardsAvailable: cardResult.available }
   }
   async function createAccount(input: Row) {
     const name = requireText(input.name, 'Nome da conta', 120)

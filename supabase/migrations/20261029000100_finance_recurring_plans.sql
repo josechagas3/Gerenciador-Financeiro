@@ -126,6 +126,7 @@ returns table (occurrence_id uuid, transaction_id uuid, status text)
 language plpgsql
 security invoker
 set search_path = ''
+set app.finance_recurring_writes_enabled = 'false'
 as $$
 declare
   v_user_id uuid := auth.uid();

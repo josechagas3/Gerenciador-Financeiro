@@ -168,6 +168,19 @@ export async function createFinanceServerRepository() {
     const result = await db.from('credit_cards').delete().eq('id', requireText(id, 'Cartão', 80)).eq('user_id', user.id)
     await throwIfError(result, 'Não é possível excluir um cartão com faturas ou lançamentos relacionados.')
   }
+  async function registerCardPurchase(input: Row) {
+    const invoiceId = requireText(input.invoiceId, 'Fatura', 80)
+    const description = requireText(input.description, 'Descrição da compra', 240)
+    const amountCents = parseMoneyCents(input.amountCents as string | number | bigint)
+    const occurredOn = requireDate(input.occurredOn, 'Data da compra')
+    const installmentCount = Number(input.installmentCount ?? 1)
+    const operationKey = requireText(input.operationKey, 'Chave da operação', 200)
+    const requestHash = hashRequest({ invoiceId, categoryId: input.categoryId ?? null, description, amountCents: amountCents.toString(), occurredOn, installmentCount, userId: user.id })
+    if (amountCents <= 0n || !Number.isInteger(installmentCount) || installmentCount < 1 || installmentCount > 120) throw new FinancePersistenceError('Valor e quantidade de parcelas inválidos.')
+    const result = await db.rpc('register_card_purchase', { p_invoice_id: invoiceId, p_category_id: input.categoryId ? requireText(input.categoryId, 'Categoria', 80) : null, p_description: description, p_amount_cents: amountCents.toString(), p_occurred_on: occurredOn, p_installment_count: installmentCount, p_operation_key: operationKey, p_request_hash: requestHash })
+    await throwIfError(result, 'Não foi possível registrar a compra na fatura.')
+    return result.data
+  }
   async function registerInvoicePayment(input: Row) {
     const invoiceId = requireText(input.invoiceId, 'Fatura', 80); const paymentTransactionId = requireText(input.paymentTransactionId, 'Lançamento do pagamento', 80); const operationKey = requireText(input.operationKey, 'Chave da operação', 200); const paidCents = parseMoneyCents(input.paidCents as string | number | bigint)
     if (paidCents <= 0n) throw new FinancePersistenceError('O pagamento deve ser maior que zero.')
@@ -266,5 +279,5 @@ export async function createFinanceServerRepository() {
     if (row.status !== 'posted' || !['income', 'expense'].includes(String(row.transaction_type))) throw new FinancePersistenceError('Somente receitas e despesas publicadas podem ser estornadas.')
     return createEntry({ accountId: row.account_id, categoryId: row.category_id, type: row.transaction_type === 'expense' ? 'income' : 'expense', amountCents: asMoney(row.amount_cents).toString(), effectiveOn: new Date().toISOString().slice(0, 10), description: `Estorno: ${row.description}`, idempotencyKey: `reversal:${originalId}`, originalTransactionId: originalId })
   }
-  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
+  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, registerCardPurchase, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
 }

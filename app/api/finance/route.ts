@@ -34,6 +34,7 @@ export async function POST(request: Request) {
     else if (body.resource === 'goals' && body.action === 'create') result = await extended.createGoal(data)
     else if (body.resource === 'goals' && body.action === 'contribution') result = await extended.contributeGoal(data)
     else if (body.resource === 'cards' && body.action === 'create') result = await repository.createCard(data)
+    else if (body.resource === 'invoices' && body.action === 'register-purchase') result = await repository.registerCardPurchase(data)
     else if (body.resource === 'invoices' && body.action === 'register-payment') result = await repository.registerInvoicePayment(data)
     else if (body.resource === 'accounts' && body.action === 'create') result = await repository.createAccount(data)
     else if (body.resource === 'categories' && body.action === 'create') result = await repository.createCategory(data)

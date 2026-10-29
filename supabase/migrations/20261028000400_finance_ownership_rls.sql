@@ -29,7 +29,7 @@ ALTER TABLE finance.transfer_operations ADD COLUMN user_id uuid NOT NULL REFEREN
 ALTER TABLE finance.card_invoices ADD COLUMN user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE finance.card_invoice_items ADD COLUMN user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE finance.card_payments ADD COLUMN user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE;
-ALTER TABLE finance.event_log ADD COLUMN user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE finance.event_log ADD COLUMN user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE finance.idempotency_keys ADD COLUMN user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE;
 
 ALTER TABLE finance.accounts ADD CONSTRAINT accounts_id_user_id_key UNIQUE (id, user_id);
@@ -70,11 +70,23 @@ ALTER TABLE finance.card_payments ADD CONSTRAINT card_payment_invoice_same_user_
   FOREIGN KEY (invoice_id, user_id) REFERENCES finance.card_invoices (id, user_id);
 ALTER TABLE finance.card_payments ADD CONSTRAINT card_payment_transaction_same_user_fk
   FOREIGN KEY (payment_transaction_id, user_id) REFERENCES finance.transactions (id, user_id);
+ALTER TABLE finance.transactions ADD CONSTRAINT transactions_operation_same_user_fk
+  FOREIGN KEY (operation_key, user_id) REFERENCES finance.idempotency_keys (key, user_id);
+ALTER TABLE finance.transfer_operations ADD CONSTRAINT transfer_operation_key_same_user_fk
+  FOREIGN KEY (idempotency_key, user_id) REFERENCES finance.idempotency_keys (key, user_id);
+ALTER TABLE finance.card_payments ADD CONSTRAINT card_payment_operation_key_same_user_fk
+  FOREIGN KEY (operation_key, user_id) REFERENCES finance.idempotency_keys (key, user_id);
+ALTER TABLE finance.transactions ADD CONSTRAINT transactions_original_same_user_fk
+  FOREIGN KEY (original_transaction_id, user_id) REFERENCES finance.transactions (id, user_id);
+ALTER TABLE finance.transactions ADD CONSTRAINT transactions_transfer_same_user_fk
+  FOREIGN KEY (transfer_group_id, user_id) REFERENCES finance.transfer_operations (id, user_id);
 
 DO $$
 DECLARE
   table_name text;
 BEGIN
+  GRANT USAGE ON SCHEMA finance TO authenticated;
+
   FOREACH table_name IN ARRAY ARRAY[
     'accounts', 'categories', 'transactions', 'transfer_operations',
     'card_invoices', 'card_invoice_items', 'card_payments',

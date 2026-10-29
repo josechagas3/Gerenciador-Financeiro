@@ -149,6 +149,9 @@ export async function createFinanceServerRepository() {
   }
   async function updateEntry(id: unknown, input: Row) {
     const entryId = requireText(id, 'Lançamento', 80); const entry = validateEntryInput({ ...input, idempotencyKey: input.idempotencyKey ?? `update:${entryId}` })
+    const reversal = await db.from('transactions').select('id').eq('original_transaction_id', entryId).eq('user_id', user.id).limit(1).maybeSingle()
+    if (reversal.error) throw new FinancePersistenceError('Não foi possível verificar o histórico do lançamento.', 500)
+    if (reversal.data) throw new FinancePersistenceError('Lançamentos estornados não podem ser editados.', 409)
     const result = await db.from('transactions').update({ category_id: entry.categoryId, transaction_type: entry.type, amount_cents: entry.amountCents.toString(), entry_sign: entry.type === 'expense' ? -1 : 1, occurred_at: `${entry.effectiveOn}T00:00:00.000Z`, description: entry.description, original_transaction_id: entry.originalTransactionId }).eq('id', entryId).eq('user_id', user.id).eq('status', 'posted').select('id,account_id,category_id,transaction_type,status,amount_cents,occurred_at,description,transfer_group_id,operation_key').single()
     await throwIfError(result, 'Não foi possível atualizar o lançamento.')
     return mapMovement(result.data as Row)

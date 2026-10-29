@@ -30,11 +30,17 @@ begin
   if p_amount_cents is null or p_amount_cents <= 0 then
     raise exception 'amount must be positive';
   end if;
-  if p_transaction_type not in ('opening', 'income', 'expense', 'reversal', 'adjustment') then
+  if p_transaction_type not in ('opening', 'income', 'expense') then
     raise exception 'unsupported transaction type';
+  end if;
+  if p_original_transaction_id is not null then
+    raise exception 'reversal and adjustment must use their dedicated server flow';
   end if;
   if p_operation_key is null or length(p_operation_key) not between 16 and 200 then
     raise exception 'invalid operation key';
+  end if;
+  if p_request_hash is null or length(btrim(p_request_hash)) = 0 then
+    raise exception 'request hash is required';
   end if;
 
   insert into finance.idempotency_keys (key, operation, request_hash, user_id)

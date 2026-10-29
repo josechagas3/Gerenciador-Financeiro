@@ -169,16 +169,17 @@ export async function createFinanceServerRepository() {
     await throwIfError(result, 'Não é possível excluir um cartão com faturas ou lançamentos relacionados.')
   }
   async function registerCardPurchase(input: Row) {
-    const invoiceId = requireText(input.invoiceId, 'Fatura', 80)
+    const cardId = requireText(input.cardId, 'Cartão', 80)
+    const invoiceId = input.invoiceId ? requireText(input.invoiceId, 'Fatura', 80) : null
     const description = requireText(input.description, 'Descrição da compra', 240)
     const amountCents = parseMoneyCents(input.amountCents as string | number | bigint)
     const occurredOn = requireDate(input.occurredOn, 'Data da compra')
     const installmentCount = Number(input.installmentCount ?? 1)
     const operationKey = requireText(input.operationKey, 'Chave da operação', 200)
     const categoryId = requireText(input.categoryId, 'Categoria', 80)
-    const requestHash = hashRequest({ invoiceId, categoryId, description, amountCents: amountCents.toString(), occurredOn, installmentCount, userId: user.id })
+    const requestHash = hashRequest({ cardId, invoiceId, categoryId, description, amountCents: amountCents.toString(), occurredOn, installmentCount, userId: user.id })
     if (amountCents <= 0n || !Number.isInteger(installmentCount) || installmentCount < 1 || installmentCount > 120) throw new FinancePersistenceError('Valor e quantidade de parcelas inválidos.')
-    const result = await db.rpc('register_card_purchase', { p_invoice_id: invoiceId, p_category_id: categoryId, p_description: description, p_amount_cents: amountCents.toString(), p_occurred_on: occurredOn, p_installment_count: installmentCount, p_operation_key: operationKey, p_request_hash: requestHash })
+    const result = await db.rpc('register_card_purchase', { p_card_id: cardId, p_invoice_id: invoiceId, p_category_id: categoryId, p_description: description, p_amount_cents: amountCents.toString(), p_occurred_on: occurredOn, p_installment_count: installmentCount, p_operation_key: operationKey, p_request_hash: requestHash })
     await throwIfError(result, 'Não foi possível registrar a compra na fatura.')
     return result.data
   }

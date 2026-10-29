@@ -36,17 +36,18 @@ declare
   v_invoice finance.card_invoices%rowtype;
   v_transaction finance.transactions%rowtype;
   v_item finance.card_invoice_items%rowtype;
-  v_result jsonb;
 begin
   if v_user_id is null then raise exception 'authentication required'; end if;
   if p_amount_cents is null or p_amount_cents <= 0 then raise exception 'purchase amount must be positive'; end if;
   if length(trim(coalesce(p_description, ''))) not between 1 and 240 then raise exception 'purchase description is required'; end if;
-  if p_installment_count is null or p_installment_count not between 1 and 120 then raise exception 'invalid installment count'; end if;
+  if p_installment_count is null or p_installment_count <> 1 then raise exception 'installments require invoice allocation and are not enabled in this migration'; end if;
   if p_operation_key is null or length(trim(p_operation_key)) not between 16 and 200 then raise exception 'invalid operation key'; end if;
 
-  select * into v_invoice from finance.card_invoices
-    where id = p_invoice_id and user_id = v_user_id
-    for update;
+  select ci.* into v_invoice
+    from finance.card_invoices ci
+    join finance.accounts a on a.id = ci.account_id and a.user_id = v_user_id
+    where ci.id = p_invoice_id
+    for update of ci;
   if not found then raise exception 'invoice not found'; end if;
   if v_invoice.status not in ('open', 'closed') then raise exception 'invoice is not accepting purchases'; end if;
 
@@ -54,8 +55,13 @@ begin
   select t.* into v_transaction from finance.transactions t
     where t.operation_key = p_operation_key and t.user_id = v_user_id;
   if found then
+    if not exists (select 1 from finance.idempotency_keys k where k.key = p_operation_key and k.user_id = v_user_id and k.operation = 'create_transaction' and k.request_hash = p_request_hash) then
+      raise exception 'operation key was already used with a different request';
+    end if;
     select i.* into v_item from finance.card_invoice_items i
-      where i.transaction_id = v_transaction.id and i.user_id = v_user_id;
+      join finance.card_invoices ci on ci.id = i.invoice_id
+      join finance.accounts a on a.id = ci.account_id and a.user_id = v_user_id
+      where i.transaction_id = v_transaction.id;
     if not found then raise exception 'operation key already belongs to another operation'; end if;
     return query select v_transaction.id, v_item.id, v_item.invoice_id, v_item.total_cents;
     return;
@@ -75,10 +81,10 @@ begin
 
   insert into finance.card_invoice_items (
     invoice_id, transaction_id, principal_cents, interest_cents, fee_cents,
-    user_id, description, category_id, occurred_on, installment_number, installment_count
+    description, category_id, occurred_on, installment_number, installment_count
   ) values (
     v_invoice.id, v_transaction.id, p_amount_cents, 0, 0,
-    v_user_id, trim(p_description), p_category_id, p_occurred_on, 1, p_installment_count
+    trim(p_description), p_category_id, p_occurred_on, 1, p_installment_count
   ) returning * into v_item;
 
   update finance.card_invoices

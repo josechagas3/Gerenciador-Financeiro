@@ -24,7 +24,7 @@ BEGIN
   JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE n.nspname = 'finance'
     AND p.proname = 'realize_recurring_occurrence';
-  IF v_security <> 'f' THEN
+  IF v_security IS DISTINCT FROM false THEN
     RAISE EXCEPTION 'FAIL: RPC is not SECURITY INVOKER';
   END IF;
   IF position('search_path=' in replace(array_to_string(coalesce(v_config, ARRAY[]::text[]), ','), ' ', '')) = 0 THEN
@@ -38,9 +38,19 @@ BEGIN
   FROM information_schema.role_routine_grants
   WHERE routine_schema = 'finance'
     AND routine_name = 'realize_recurring_occurrence'
-    AND grantee IN ('public', 'anon');
+    AND lower(grantee) IN ('public', 'anon');
   IF v_execute_count <> 0 THEN
     RAISE EXCEPTION 'FAIL: RPC is executable by public or anon';
+  END IF;
+
+  SELECT count(*) INTO v_execute_count
+  FROM information_schema.role_routine_grants
+  WHERE routine_schema = 'finance'
+    AND routine_name = 'realize_recurring_occurrence'
+    AND lower(grantee) = 'authenticated'
+    AND privilege_type = 'EXECUTE';
+  IF v_execute_count <> 1 THEN
+    RAISE EXCEPTION 'FAIL: authenticated does not have exactly one EXECUTE grant';
   END IF;
 
   RAISE NOTICE 'PASS: RLS, SECURITY INVOKER, search_path, default gate and grants';
@@ -72,7 +82,18 @@ BEGIN
     RAISE EXCEPTION 'FAIL: occurrence uniqueness constraint is missing';
   END IF;
 
-  RAISE NOTICE 'PASS: RLS ownership and duplicate-period constraint';
+  SELECT count(*) INTO v_unique_count
+  FROM pg_constraint c
+  JOIN pg_class t ON t.oid = c.conrelid
+  JOIN pg_namespace n ON n.oid = t.relnamespace
+  WHERE n.nspname = 'finance'
+    AND t.relname = 'idempotency_keys'
+    AND c.contype = 'p';
+  IF v_unique_count <> 1 THEN
+    RAISE EXCEPTION 'FAIL: idempotency key primary key is missing';
+  END IF;
+
+  RAISE NOTICE 'PASS: RLS ownership, duplicate-period and idempotency constraints';
 END;
 $$;
 

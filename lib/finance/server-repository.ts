@@ -111,7 +111,7 @@ export async function createFinanceServerRepository() {
   async function listMovements() {
     const { data, error } = await db.from('transactions').select('id,account_id,category_id,transaction_type,status,amount_cents,occurred_at,description,transfer_group_id,operation_key').eq('user_id', user.id).order('occurred_at', { ascending: false })
     if (error) throw new FinancePersistenceError('Não foi possível carregar os lançamentos.', 500)
-    return (data ?? []).map(mapMovement)
+    return (data ?? []).filter((row) => row.status !== 'cancelled').map(mapMovement)
   }
   async function listCards(): Promise<{ cards: FinanceCard[]; available: boolean }> {
     const { data: cards, error } = await db.from('credit_cards').select('id,account_id,name,brand,credit_limit_cents,closing_day,due_day').eq('user_id', user.id).order('name')

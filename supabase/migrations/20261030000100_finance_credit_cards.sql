@@ -5,8 +5,9 @@ begin;
 
 create table if not exists finance.credit_cards (
   id uuid primary key default gen_random_uuid(),
-  account_id uuid not null unique references finance.accounts(id) on delete restrict,
+  account_id uuid not null unique,
   user_id uuid not null references auth.users(id) on delete cascade,
+  constraint credit_cards_account_same_user_fk foreign key (account_id, user_id) references finance.accounts(id, user_id) on delete restrict,
   name text not null check (length(trim(name)) between 1 and 120),
   brand text not null check (length(trim(brand)) between 1 and 40),
   credit_limit_cents bigint not null check (credit_limit_cents > 0),

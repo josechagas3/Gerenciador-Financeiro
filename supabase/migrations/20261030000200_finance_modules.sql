@@ -15,6 +15,7 @@ create table if not exists finance.debt_payments (
   created_at timestamptz not null default now(), unique(user_id, operation_key)
 );
 create index if not exists debt_payments_debt_idx on finance.debt_payments(user_id, debt_id, paid_on desc);
+create index if not exists debt_payments_debt_fk_idx on finance.debt_payments(debt_id);
 
 create table if not exists finance.investments (
   id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade,
@@ -38,8 +39,10 @@ create table if not exists finance.goal_contributions (
 );
 
 create index if not exists investment_movements_user_idx on finance.investment_movements(user_id, investment_id, occurred_on desc);
+create index if not exists investment_movements_investment_fk_idx on finance.investment_movements(investment_id);
 create index if not exists goals_user_idx on finance.goals(user_id, status, deadline);
 create index if not exists goal_contributions_user_idx on finance.goal_contributions(user_id, goal_id, contributed_on desc);
+create index if not exists goal_contributions_goal_fk_idx on finance.goal_contributions(goal_id);
 
 alter table finance.debts enable row level security; alter table finance.debt_payments enable row level security; alter table finance.investments enable row level security; alter table finance.investment_movements enable row level security; alter table finance.goals enable row level security; alter table finance.goal_contributions enable row level security;
 grant select, insert, update, delete on finance.debts, finance.debt_payments, finance.investments, finance.investment_movements, finance.goals, finance.goal_contributions to authenticated;
@@ -65,6 +68,7 @@ begin
   update finance.debts set balance_cents = current_balance - new.amount_cents, installments_paid = least(installments_total, installments_paid + 1), status = case when current_balance = new.amount_cents then 'paid' else status end, updated_at = now() where id = new.debt_id;
   return new;
 end; $$;
+alter function finance.apply_debt_payment() set search_path = finance, public;
 drop trigger if exists debt_payment_balance_trigger on finance.debt_payments;
 create trigger debt_payment_balance_trigger before insert on finance.debt_payments for each row execute function finance.apply_debt_payment();
 

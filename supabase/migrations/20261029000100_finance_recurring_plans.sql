@@ -137,6 +137,9 @@ begin
   if v_user_id is null then
     raise exception 'authentication required' using errcode = '42501';
   end if;
+  if coalesce(current_setting('app.finance_recurring_writes_enabled', true), 'false') <> 'true' then
+    raise exception 'recurring writes are disabled until explicitly enabled';
+  end if;
   if p_occurrence_id is null
      or length(trim(coalesce(p_operation_key, ''))) < 16
      or length(trim(coalesce(p_request_hash, ''))) < 16 then

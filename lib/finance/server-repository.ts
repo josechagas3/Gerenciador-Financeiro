@@ -132,15 +132,18 @@ export async function createFinanceServerRepository() {
   }
   async function createEntry(input: Row) {
     const entry = validateEntryInput(input)
-    const operationKey = entry.idempotencyKey
     const requestHash = hashRequest({ ...entry, userId: user.id })
-    const existing = await db.from('transactions').select('id,account_id,category_id,transaction_type,status,amount_cents,occurred_at,description,transfer_group_id,operation_key').eq('operation_key', operationKey).eq('user_id', user.id).maybeSingle()
-    if (existing.error) throw new FinancePersistenceError('Não foi possível verificar a idempotência do lançamento.', 500)
-    if (existing.data) return mapMovement(existing.data as Row)
-    const idem = await db.from('idempotency_keys').insert({ key: operationKey, operation: 'create_transaction', request_hash: requestHash, user_id: user.id }).select('key').single()
-    await throwIfError(idem, 'Não foi possível reservar a operação financeira.')
-    const row = { account_id: entry.accountId, category_id: entry.categoryId, transaction_type: entry.type, status: 'posted', amount_cents: entry.amountCents.toString(), entry_sign: entry.type === 'expense' ? -1 : 1, occurred_at: `${entry.effectiveOn}T00:00:00.000Z`, description: entry.description, original_transaction_id: entry.originalTransactionId, operation_key: operationKey, user_id: user.id }
-    const result = await db.from('transactions').insert(row).select('id,account_id,category_id,transaction_type,status,amount_cents,occurred_at,description,transfer_group_id,operation_key').single()
+    const result = await db.rpc('create_transaction', {
+      p_account_id: entry.accountId,
+      p_category_id: entry.categoryId,
+      p_transaction_type: entry.type,
+      p_amount_cents: entry.amountCents.toString(),
+      p_occurred_at: `${entry.effectiveOn}T00:00:00.000Z`,
+      p_description: entry.description,
+      p_operation_key: entry.idempotencyKey,
+      p_request_hash: requestHash,
+      p_original_transaction_id: entry.originalTransactionId ?? null,
+    })
     await throwIfError(result, 'Não foi possível criar o lançamento.')
     return mapMovement(result.data as Row)
   }

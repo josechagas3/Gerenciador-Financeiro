@@ -35,6 +35,7 @@ migrations=(
   "$root_dir/supabase/migrations/20261028000300_finance_security.sql"
   "$root_dir/supabase/migrations/20261028000400_finance_ownership_rls.sql"
   "$root_dir/supabase/migrations/20261029000100_finance_recurring_plans.sql"
+  "$root_dir/supabase/migrations/20261029000200_finance_transaction_rpc.sql"
 )
 
 for migration in "${migrations[@]}"; do

@@ -10,6 +10,7 @@ export async function createClient() {
     {
       cookieOptions: {
         secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       },
       cookies: {
         getAll() {

@@ -47,6 +47,8 @@ create table finance.recurring_occurrences (
     check ((status = 'realized') = (transaction_id is not null and realized_at is not null)),
   constraint recurring_occurrences_planned_link_check
     check (status <> 'planned' or (transaction_id is null and realized_at is null)),
+  constraint recurring_occurrences_cancelled_link_check
+    check (status <> 'cancelled' or (transaction_id is null and realized_at is null)),
   unique (id, user_id),
   unique (plan_id, period)
 );
@@ -59,16 +61,40 @@ create trigger recurring_plans_touch_updated_at
 before update on finance.recurring_plans
 for each row execute function finance.touch_updated_at();
 
+create or replace function finance.validate_recurring_occurrence_transition()
+returns trigger language plpgsql as $$
+begin
+  if old.status in ('realized', 'cancelled') then
+    raise exception 'realized and cancelled recurring occurrences are immutable';
+  end if;
+  if old.status = 'planned' and new.status = 'realized'
+     and (new.transaction_id is null or new.realized_at is null) then
+    raise exception 'realized recurring occurrence requires a linked transaction and realized_at';
+  end if;
+  if old.status = 'planned' and new.status = 'cancelled'
+     and (new.transaction_id is not null or new.realized_at is not null) then
+    raise exception 'cancelled recurring occurrence cannot have a linked transaction';
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function finance.validate_recurring_occurrence_transition() from public, anon, authenticated;
+
+create trigger recurring_occurrences_transition_guard
+before update on finance.recurring_occurrences
+for each row execute function finance.validate_recurring_occurrence_transition();
+
 create trigger recurring_occurrences_touch_updated_at
 before update on finance.recurring_occurrences
 for each row execute function finance.touch_updated_at();
 
 create trigger recurring_plans_audit
-after insert or update on finance.recurring_plans
+after insert or update or delete on finance.recurring_plans
 for each row execute function finance.audit_financial_change();
 
 create trigger recurring_occurrences_audit
-after insert or update on finance.recurring_occurrences
+after insert or update or delete on finance.recurring_occurrences
 for each row execute function finance.audit_financial_change();
 
 alter table finance.recurring_plans enable row level security;

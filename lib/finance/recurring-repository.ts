@@ -1,7 +1,5 @@
 import { FinancePersistenceError, getFinanceAuthContext } from './server-repository'
 
-const RECURRING_WRITES_ENABLED = false
-
 type Row = Record<string, unknown>
 
 export type RecurringPlan = {
@@ -104,10 +102,10 @@ export async function createRecurringServerRepository() {
   return {
     user: context.user,
     snapshot,
-    createPlan: async (_input: Row) => RECURRING_WRITES_ENABLED ? writesBlocked() : writesBlocked(),
-    updatePlan: async (_id: unknown, _input: Row) => RECURRING_WRITES_ENABLED ? writesBlocked() : writesBlocked(),
-    cancelPlan: async (_id: unknown) => RECURRING_WRITES_ENABLED ? writesBlocked() : writesBlocked(),
-    realizeOccurrence: async (_id: unknown) => RECURRING_WRITES_ENABLED ? writesBlocked() : writesBlocked(),
-    cancelOccurrence: async (_id: unknown) => RECURRING_WRITES_ENABLED ? writesBlocked() : writesBlocked(),
+    createPlan: async (_input: Row) => writesBlocked(),
+    updatePlan: async (_id: unknown, _input: Row) => writesBlocked(),
+    cancelPlan: async (_id: unknown) => writesBlocked(),
+    realizeOccurrence: async (_id: unknown) => writesBlocked(),
+    cancelOccurrence: async (_id: unknown) => writesBlocked(),
   }
 }

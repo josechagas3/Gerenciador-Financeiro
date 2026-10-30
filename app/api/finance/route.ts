@@ -70,6 +70,7 @@ export async function DELETE(request: Request) {
     else if (body.resource === 'investments') await extended.deleteInvestment(body.id)
     else if (body.resource === 'goals') await extended.deleteGoal(body.id)
     else if (body.resource === 'cards') await repository.deleteCard(body.id)
+    else if (body.resource === 'invoices') await repository.deleteInvoice(body.id)
     else if (body.resource === 'accounts') await repository.deleteAccount(body.id)
     else if (body.resource === 'categories') await repository.deleteCategory(body.id)
     else return NextResponse.json({ error: 'Recurso inválido.' }, { status: 400 })

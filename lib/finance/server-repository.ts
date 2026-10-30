@@ -247,6 +247,11 @@ export async function createFinanceServerRepository() {
     await throwIfError(result, 'Não foi possível registrar o pagamento da fatura.')
     return result.data
   }
+  async function deleteInvoice(id: unknown) {
+    const invoiceId = requireText(id, 'Fatura', 80)
+    const result = await db.rpc('delete_card_invoice_safely', { p_invoice_id: invoiceId })
+    await throwIfError(result, 'Não foi possível excluir a fatura. Faturas com registros financeiros permanecem protegidas.')
+  }
   async function reconcileHistoricalInvoice(input: Row) {
     const invoiceId = requireText(input.invoiceId, 'Fatura', 80)
     const operationKey = requireText(input.operationKey, 'Chave da operação', 200)
@@ -359,5 +364,5 @@ export async function createFinanceServerRepository() {
     if (row.status !== 'posted' || !['income', 'expense'].includes(String(row.transaction_type))) throw new FinancePersistenceError('Somente receitas e despesas publicadas podem ser estornadas.')
     return createEntry({ accountId: row.account_id, categoryId: row.category_id, type: row.transaction_type === 'expense' ? 'income' : 'expense', amountCents: asMoney(row.amount_cents).toString(), effectiveOn: new Date().toISOString().slice(0, 10), description: `Estorno: ${row.description}`, idempotencyKey: `reversal:${originalId}`, originalTransactionId: originalId })
   }
-  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, registerCardPurchase, registerExistingCardInvoice, registerHistoricalCardPurchaseImport, reconcileHistoricalInvoice, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
+  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, deleteInvoice, registerCardPurchase, registerExistingCardInvoice, registerHistoricalCardPurchaseImport, reconcileHistoricalInvoice, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
 }

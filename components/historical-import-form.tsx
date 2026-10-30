@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from 'react'
 import { formatMoneyCents, formatMoneyInput, parseMoneyCents, sanitizeMoneyInput } from '@/lib/finance/domain'
-import { InvoicePdfImport } from './invoice-pdf-import'
+import { InvoicePdfImport, type InvoicePdfImportData } from './invoice-pdf-import'
 
 type ItemKind = 'purchase' | 'credit' | 'refund' | 'interest' | 'iof' | 'annual_fee' | 'fee' | 'other_charge'
 type Item = { kind: ItemKind; description: string; occurredOn: string; categoryId: string; amountCents: string; installmentCount: string }
 type Payment = { transactionId: string; paidAt: string; amountCents: string }
-type Props = { invoiceId: string; invoiceTotalCents: string; paidCents: string; categories: Array<{ id: string; name: string }>; transactions: Array<{ id: string; description: string; effectiveOn: string }>; refresh: () => Promise<unknown> }
+type Props = { invoiceId: string; invoiceTotalCents: string; paidCents: string; categories: Array<{ id: string; name: string }>; transactions: Array<{ id: string; description: string; effectiveOn: string }>; refresh: () => Promise<unknown>; pendingImport?: InvoicePdfImportData | null }
 
 const kinds: Array<{ value: ItemKind; label: string; sign: 'plus' | 'minus' }> = [
   { value: 'purchase', label: 'Compra', sign: 'plus' },
@@ -23,10 +23,10 @@ const blankItem = (): Item => ({ kind: 'purchase', description: '', occurredOn: 
 const blankPayment = (): Payment => ({ transactionId: '', paidAt: '', amountCents: '' })
 const money = (cents: bigint) => formatMoneyCents(cents)
 
-export function HistoricalImportForm({ invoiceId, invoiceTotalCents, paidCents, categories, transactions, refresh }: Props) {
-  const [openingBalance, setOpeningBalance] = useState('')
-  const [items, setItems] = useState<Item[]>([blankItem()])
-  const [payments, setPayments] = useState<Payment[]>([])
+export function HistoricalImportForm({ invoiceId, invoiceTotalCents, paidCents, categories, transactions, refresh, pendingImport }: Props) {
+  const [openingBalance, setOpeningBalance] = useState(pendingImport?.openingBalance || '')
+  const [items, setItems] = useState<Item[]>(pendingImport?.items.map((item) => ({ kind: item.kind, description: item.description, occurredOn: item.occurredOn || '', categoryId: '', amountCents: item.amount, installmentCount: String(item.installmentTotal || 1) })) || [blankItem()])
+  const [payments, setPayments] = useState<Payment[]>(pendingImport?.payments.map((payment) => ({ transactionId: '', paidAt: payment.paidAt || '', amountCents: payment.amount })) || [])
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
   const total = useMemo(() => {
@@ -41,7 +41,7 @@ export function HistoricalImportForm({ invoiceId, invoiceTotalCents, paidCents, 
   const difference = invoiceTotal - total
   const updateItem = (index: number, field: keyof Item, value: string) => setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item))
   const updatePayment = (index: number, field: keyof Payment, value: string) => setPayments((current) => current.map((payment, paymentIndex) => paymentIndex === index ? { ...payment, [field]: value } : payment))
-  const applyPdf = (value: { openingBalance: string; items: Array<{ kind: ItemKind; description: string; occurredOn: string | null; amount: string; installmentTotal: number | null }>; payments: Array<{ paidAt: string | null; amount: string }> }) => { setOpeningBalance(value.openingBalance); setItems(value.items.map((item) => ({ kind: item.kind, description: item.description, occurredOn: item.occurredOn || '', amountCents: item.amount, installmentCount: String(item.installmentTotal || 1), categoryId: '' }))); setPayments(value.payments.map((payment) => ({ transactionId: '', paidAt: payment.paidAt || '', amountCents: payment.amount }))); setError(''); }
+  const applyPdf = (value: { openingBalance: string | null; items: Array<{ kind: ItemKind; description: string; occurredOn: string | null; amount: string; installmentTotal: number | null }>; payments: Array<{ paidAt: string | null; amount: string; confidence: number }> }) => { setOpeningBalance(value.openingBalance || ''); setItems(value.items.map((item) => ({ kind: item.kind, description: item.description, occurredOn: item.occurredOn || '', amountCents: item.amount, installmentCount: String(item.installmentTotal || 1), categoryId: '' }))); setPayments(value.payments.map((payment) => ({ transactionId: '', paidAt: payment.paidAt || '', amountCents: payment.amount }))); setError(''); }
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); setError('')
     if (difference !== 0n) { setError(`A conciliação precisa fechar em ${money(invoiceTotal)}. Diferença atual: ${money(difference)}.`); return }

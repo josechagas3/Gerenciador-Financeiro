@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { formatMoneyCents, formatMoneyInput, parseMoneyCents, sanitizeMoneyInput } from '@/lib/finance/domain'
 import { InvoicePdfImport, type InvoicePdfImportData } from './invoice-pdf-import'
 
-type ItemKind = 'purchase' | 'credit' | 'refund' | 'interest' | 'iof' | 'annual_fee' | 'fee' | 'other_charge'
+type ItemKind = 'purchase' | 'credit' | 'refund' | 'interest' | 'iof' | 'annual_fee' | 'fee' | 'other_charge' | 'needs_review'
 type Item = { kind: ItemKind; description: string; cardIdentifier: string | null; occurredOn: string; categoryId: string; amountCents: string; installmentCurrent: string; installmentCount: string }
 type Payment = { transactionId: string; paidAt: string; amountCents: string }
 type PaymentCandidate = { id: string; description: string; effectiveOn: string; amountCents: string; accountName: string; categoryName: string }
@@ -19,6 +19,7 @@ const kinds: Array<{ value: ItemKind; label: string; sign: 'plus' | 'minus' }> =
   { value: 'annual_fee', label: 'Anuidade', sign: 'plus' },
   { value: 'fee', label: 'Tarifa', sign: 'plus' },
   { value: 'other_charge', label: 'Outro encargo', sign: 'plus' },
+  { value: 'needs_review', label: 'Revisar: possível fatura/parcelamento', sign: 'plus' },
 ]
 const blankItem = (): Item => ({ kind: 'purchase', description: '', cardIdentifier: null, occurredOn: '', categoryId: '', amountCents: '', installmentCurrent: '1', installmentCount: '1' })
 const blankPayment = (): Payment => ({ transactionId: '', paidAt: '', amountCents: '' })
@@ -42,7 +43,7 @@ export function HistoricalImportForm({ invoiceId, invoiceTotalCents, paidCents, 
   const calculatedTotalCents = useMemo(() => {
     let value = 0n
     try { value += absoluteMoneyCents(openingBalance) } catch {}
-    for (const item of items) { try { value += ['credit', 'refund'].includes(item.kind) ? -absoluteMoneyCents(item.amountCents) : absoluteMoneyCents(item.amountCents) } catch {} }
+    for (const item of items) { try { value += ['credit', 'refund'].includes(item.kind) ? -absoluteMoneyCents(item.amountCents) : item.kind === 'needs_review' ? 0n : absoluteMoneyCents(item.amountCents) } catch {} }
     for (const payment of payments) { try { value -= absoluteMoneyCents(payment.amountCents) } catch {} }
     value -= paidCentsValue
     return value
@@ -61,6 +62,7 @@ export function HistoricalImportForm({ invoiceId, invoiceTotalCents, paidCents, 
   const applyPdf = (value: InvoicePdfImportData) => { setOpeningBalance(value.openingBalance || ''); setItems(value.items.map((item) => ({ kind: item.kind, description: item.description, cardIdentifier: item.cardIdentifier || null, occurredOn: item.occurredOn || '', amountCents: item.amount, installmentCurrent: item.installmentCurrent == null ? '' : String(item.installmentCurrent), installmentCount: item.installmentTotal == null ? '' : String(item.installmentTotal), categoryId: '' }))); setPayments(value.payments.map((payment) => ({ transactionId: '', paidAt: payment.paidAt || '', amountCents: payment.amount }))); setError(''); }
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); setError('')
+    if (items.some((item) => item.kind === 'needs_review')) { setError('Revise o lançamento marcado como possível pagamento ou parcelamento de fatura antes de confirmar.'); return }
     if (items.some((item) => item.kind === 'purchase' && (!Number.isInteger(Number(item.installmentCurrent)) || Number(item.installmentCurrent) < 1 || !Number.isInteger(Number(item.installmentCount)) || Number(item.installmentCount) < Number(item.installmentCurrent)))) { setError('Revise a parcela atual e o total de parcelas de cada compra.'); return }
     if (!allPaymentsLinked) { setError('Vincule cada pagamento a um crédito em conta existente antes de confirmar.'); return }
     if (differenceCents !== 0n) { setError(`A conciliação precisa fechar em ${money(invoiceTotalCentsValue)}. Diferença atual: ${money(differenceCents)}.`); return }

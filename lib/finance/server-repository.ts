@@ -32,6 +32,8 @@ export type FinanceInvoice = {
   paidCents: MoneyCents
   status: string
   items: Array<{ id: string; transactionId: string; description: string; occurredOn: string; totalCents: MoneyCents }>
+  adjustments: Array<{ id: string; kind: string; description: string; occurredOn: string; totalCents: MoneyCents }>
+  payments: Array<{ id: string; transactionId: string; paidAt: string; totalCents: MoneyCents }>
 }
 
 export type FinanceSnapshot = {
@@ -159,8 +161,10 @@ export async function createFinanceServerRepository() {
     const { data: transactions, error: transactionsError } = transactionIds.length ? await db.from('transactions').select('id,description,occurred_at').eq('user_id', user.id).in('id', transactionIds) : { data: [], error: null }
     if (transactionsError) throw new FinancePersistenceError(`Não foi possível carregar as transações das compras. ${transactionsError.message}`, 500)
     const transactionById = new Map((transactions ?? []).map((transaction) => [transaction.id, transaction]))
-    const { data: payments, error: paymentsError } = invoiceIds.length ? await db.from('card_payments').select('invoice_id,paid_cents').eq('user_id', user.id).in('invoice_id', invoiceIds) : { data: [], error: null }
+    const { data: payments, error: paymentsError } = invoiceIds.length ? await db.from('card_payments').select('id,invoice_id,payment_transaction_id,paid_cents,paid_at').eq('user_id', user.id).in('invoice_id', invoiceIds) : { data: [], error: null }
     if (paymentsError) throw new FinancePersistenceError(`Não foi possível carregar os pagamentos das faturas. ${paymentsError.message}`, 500)
+    const { data: adjustments, error: adjustmentsError } = invoiceIds.length ? await db.from('card_invoice_adjustments').select('id,invoice_id,kind,description,occurred_on,amount_cents').eq('user_id', user.id).in('invoice_id', invoiceIds).order('occurred_on') : { data: [], error: null }
+    if (adjustmentsError) throw new FinancePersistenceError(`Não foi possível carregar os ajustes das faturas. ${adjustmentsError.message}`, 500)
     const paid = new Map<string, bigint>()
     for (const payment of payments ?? []) paid.set(payment.invoice_id, (paid.get(payment.invoice_id) ?? 0n) + asMoney(payment.paid_cents))
     for (const invoice of invoices ?? []) { const historicalPaid = (invoice as { historical_paid_cents?: number | string | null }).historical_paid_cents; if (historicalPaid) paid.set(invoice.id, (paid.get(invoice.id) ?? 0n) + asMoney(historicalPaid)) }
@@ -169,7 +173,9 @@ export async function createFinanceServerRepository() {
     const cardByAccount = new Map((cardLookup.data ?? []).map((card) => [card.account_id, String(card.id)]))
     return (invoices ?? []).map((invoice) => ({
       id: String(invoice.id), cardId: cardByAccount.get(invoice.account_id) ?? null, accountId: String(invoice.account_id), periodStart: String(invoice.period_start), periodEnd: String(invoice.period_end), dueOn: String(invoice.due_on), totalCents: asMoney(invoice.total_cents), paidCents: paid.get(invoice.id) ?? 0n, status: String(invoice.status),
-      items: (items ?? []).filter((item) => item.invoice_id === invoice.id).map((item) => { const transaction = transactionById.get(item.transaction_id); return { id: String(item.id), transactionId: String(item.transaction_id), description: transaction?.description ?? 'Compra no cartão', occurredOn: transaction?.occurred_at ? new Date(transaction.occurred_at).toISOString().slice(0, 10) : '', totalCents: asMoney(item.total_cents) } })
+      items: (items ?? []).filter((item) => item.invoice_id === invoice.id).map((item) => { const transaction = transactionById.get(item.transaction_id); return { id: String(item.id), transactionId: String(item.transaction_id), description: transaction?.description ?? 'Compra no cartão', occurredOn: transaction?.occurred_at ? new Date(transaction.occurred_at).toISOString().slice(0, 10) : '', totalCents: asMoney(item.total_cents) } }),
+      adjustments: (adjustments ?? []).filter((adjustment) => adjustment.invoice_id === invoice.id).map((adjustment) => ({ id: String(adjustment.id), kind: String(adjustment.kind), description: String(adjustment.description), occurredOn: String(adjustment.occurred_on), totalCents: asMoney(adjustment.amount_cents) })),
+      payments: (payments ?? []).filter((payment) => payment.invoice_id === invoice.id).map((payment) => ({ id: String(payment.id), transactionId: String(payment.payment_transaction_id), paidAt: String(payment.paid_at), totalCents: asMoney(payment.paid_cents) }))
     }))
   }
   async function createCard(input: Row) {
@@ -239,6 +245,30 @@ export async function createFinanceServerRepository() {
     if (transaction.data?.status !== 'posted' || transaction.data?.transaction_type !== 'transfer') throw new FinancePersistenceError('O pagamento da fatura deve ser um lançamento de transferência publicado.')
     const result = await db.from('card_payments').insert({ invoice_id: invoiceId, payment_transaction_id: paymentTransactionId, paid_cents: paidCents.toString(), paid_at: new Date().toISOString(), operation_key: operationKey, user_id: user.id }).select('id,invoice_id,payment_transaction_id,paid_cents,paid_at,operation_key').single()
     await throwIfError(result, 'Não foi possível registrar o pagamento da fatura.')
+    return result.data
+  }
+  async function reconcileHistoricalInvoice(input: Row) {
+    const invoiceId = requireText(input.invoiceId, 'Fatura', 80)
+    const operationKey = requireText(input.operationKey, 'Chave da operação', 200)
+    const openingBalanceCents = parseMoneyCents((input.openingBalanceCents ?? '0') as string | number | bigint)
+    const items = Array.isArray(input.items) ? input.items.map((item) => {
+      if (!item || typeof item !== 'object') throw new FinancePersistenceError('Item de conciliação inválido.')
+      const value = item as Row
+      const kind = String(value.kind ?? 'purchase')
+      const amountCents = parseMoneyCents(value.amountCents as string | number | bigint)
+      if (amountCents <= 0n) throw new FinancePersistenceError('Os valores da conciliação devem ser maiores que zero.')
+      return { kind, description: requireText(value.description, 'Descrição do item', 240), occurredOn: requireDate(value.occurredOn, 'Data do item'), categoryId: value.categoryId ? requireText(value.categoryId, 'Categoria', 80) : null, amountCents: amountCents.toString(), installmentCount: Number(value.installmentCount ?? 1) }
+    }) : []
+    const payments = Array.isArray(input.payments) ? input.payments.map((payment) => {
+      if (!payment || typeof payment !== 'object') throw new FinancePersistenceError('Pagamento de conciliação inválido.')
+      const value = payment as Row
+      const amountCents = parseMoneyCents(value.amountCents as string | number | bigint)
+      return { amountCents: amountCents.toString(), transactionId: requireText(value.transactionId, 'Lançamento do pagamento', 80), paidAt: value.paidAt ? requireDate(value.paidAt, 'Data do pagamento') : new Date().toISOString().slice(0, 10) }
+    }) : []
+    if (openingBalanceCents < 0n || items.length > 500 || payments.length > 100) throw new FinancePersistenceError('A conciliação excede os limites permitidos.')
+    const requestHash = hashRequest({ invoiceId, openingBalanceCents: openingBalanceCents.toString(), items, payments, userId: user.id })
+    const result = await db.rpc('reconcile_historical_card_invoice', { p_invoice_id: invoiceId, p_operation_key: operationKey, p_request_hash: requestHash, p_opening_balance_cents: openingBalanceCents.toString(), p_items: items, p_payments: payments })
+    await throwIfError(result, 'Não foi possível conciliar a fatura histórica.')
     return result.data
   }
   async function snapshot(): Promise<FinanceSnapshot> {
@@ -329,5 +359,5 @@ export async function createFinanceServerRepository() {
     if (row.status !== 'posted' || !['income', 'expense'].includes(String(row.transaction_type))) throw new FinancePersistenceError('Somente receitas e despesas publicadas podem ser estornadas.')
     return createEntry({ accountId: row.account_id, categoryId: row.category_id, type: row.transaction_type === 'expense' ? 'income' : 'expense', amountCents: asMoney(row.amount_cents).toString(), effectiveOn: new Date().toISOString().slice(0, 10), description: `Estorno: ${row.description}`, idempotencyKey: `reversal:${originalId}`, originalTransactionId: originalId })
   }
-  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, registerCardPurchase, registerExistingCardInvoice, registerHistoricalCardPurchaseImport, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
+  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, registerCardPurchase, registerExistingCardInvoice, registerHistoricalCardPurchaseImport, reconcileHistoricalInvoice, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
 }

@@ -37,6 +37,7 @@ export async function POST(request: Request) {
     else if (body.resource === 'invoices' && body.action === 'register-purchase') result = await repository.registerCardPurchase(data)
     else if (body.resource === 'invoices' && body.action === 'create-existing') result = await repository.registerExistingCardInvoice(data)
     else if (body.resource === 'invoices' && body.action === 'historical-import') result = await repository.registerHistoricalCardPurchaseImport(data)
+    else if (body.resource === 'invoices' && body.action === 'historical-reconcile') result = await repository.reconcileHistoricalInvoice(data)
     else if (body.resource === 'invoices' && body.action === 'register-payment') result = await repository.registerInvoicePayment(data)
     else if (body.resource === 'accounts' && body.action === 'create') result = await repository.createAccount(data)
     else if (body.resource === 'categories' && body.action === 'create') result = await repository.createCategory(data)

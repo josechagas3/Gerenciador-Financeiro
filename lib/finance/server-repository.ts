@@ -265,11 +265,9 @@ export async function createFinanceServerRepository() {
       const baseItem = { kind, description: requireText(value.description, 'Descrição do item', 240), occurredOn: requireDate(value.occurredOn, 'Data do item'), categoryId: value.categoryId ? requireText(value.categoryId, 'Categoria', 80) : null, amountCents: amountCents.toString() }
       const currentRaw = value.installmentCurrent == null ? '' : String(value.installmentCurrent).trim()
       const countRaw = value.installmentCount == null ? '' : String(value.installmentCount).trim()
-      const hasInstallmentPosition = currentRaw !== '' || countRaw !== ''
-      if (!hasInstallmentPosition) {
-        if (kind === 'invoice_installment') throw new FinancePersistenceError(`Informe a parcela atual e o total para ${baseItem.description}.`)
-        return baseItem
-      }
+      const hasInstallmentPosition = kind === 'invoice_installment' || countRaw !== ''
+      if (!hasInstallmentPosition) return baseItem
+      if (kind === 'invoice_installment' && (currentRaw === '' || countRaw === '')) throw new FinancePersistenceError(`Informe a parcela atual e o total para ${baseItem.description}.` )
       const installmentCurrent = Number(currentRaw)
       const installmentCount = Number(countRaw)
       if (!Number.isInteger(installmentCurrent) || !Number.isInteger(installmentCount) || installmentCurrent < 1 || installmentCount < installmentCurrent || installmentCount > 120) throw new FinancePersistenceError(`Posição de parcela inválida para ${baseItem.description}.`)

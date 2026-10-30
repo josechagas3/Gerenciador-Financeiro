@@ -35,10 +35,10 @@ export function HistoricalImportForm({ invoiceId, invoiceTotalCents, paidCents, 
   const invalidInstallmentItems = items.filter((item) => {
     if (item.kind === 'invoice_installment') return !Number.isInteger(Number(item.installmentCurrent)) || Number(item.installmentCurrent) < 1 || !Number.isInteger(Number(item.installmentCount)) || Number(item.installmentCount) < Number(item.installmentCurrent)
     if (item.kind !== 'purchase') return false
-    const hasInstallmentFields = item.installmentCurrent.trim() !== '' || item.installmentCount.trim() !== ''
-    if (!hasInstallmentFields) return false
-    const installmentCount = Number(item.installmentCount)
-    return !Number.isInteger(Number(item.installmentCurrent)) || Number(item.installmentCurrent) < 1 || !Number.isInteger(installmentCount) || installmentCount < 2 || Number(item.installmentCurrent) > installmentCount
+    const countRaw = item.installmentCount.trim()
+    if (countRaw === '') return false
+    const installmentCount = Number(countRaw)
+    return !Number.isInteger(Number(item.installmentCurrent)) || Number(item.installmentCurrent) < 1 || !Number.isInteger(installmentCount) || installmentCount < 2 || installmentCount > 120 || Number(item.installmentCurrent) > installmentCount
   })
   const [done, setDone] = useState(false)
   useEffect(() => {

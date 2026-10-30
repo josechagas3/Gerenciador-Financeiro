@@ -72,13 +72,38 @@ export interface FinanceSummary {
 
 export function parseMoneyCents(value: MoneyInput): MoneyCents {
   if (typeof value === 'bigint') return value
-  const normalized = String(value).trim().replace(',', '.')
-  if (!/^-?\d+(?:\.\d{1,2})?$/.test(normalized)) throw new Error('Valor monetário inválido.')
-  const negative = normalized.startsWith('-')
-  const unsigned = negative ? normalized.slice(1) : normalized
-  const [whole, fraction = ''] = unsigned.split('.')
+  const input = String(value).trim().replace(/\s/g, '')
+  if (!input || !/^-?[0-9.,]+$/.test(input)) throw new Error('Valor monetário inválido.')
+  const negative = input.startsWith('-')
+  const unsigned = negative ? input.slice(1) : input
+  const hasComma = unsigned.includes(',')
+  const normalized = hasComma
+    ? unsigned.replace(/\./g, '').replace(',', '.')
+    : normalizeDotNumber(unsigned)
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) throw new Error('Valor monetário inválido.')
+  const [whole, fraction = ''] = normalized.split('.')
   const cents = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'))
   return negative ? -cents : cents
+}
+
+function normalizeDotNumber(value: string): string {
+  const parts = value.split('.')
+  if (parts.length === 1) return value
+  if (parts.slice(1).every((part) => part.length === 3)) return parts.join('')
+  if (parts.length !== 2) throw new Error('Valor monetário inválido.')
+  return value
+}
+
+export function sanitizeMoneyInput(value: string): string {
+  return value.replace(/[^0-9.,]/g, '')
+}
+
+export function formatMoneyInput(value: string): string {
+  const cents = parseMoneyCents(value)
+  const absolute = cents < 0n ? -cents : cents
+  const whole = absolute / 100n
+  const fraction = String(absolute % 100n).padStart(2, '0')
+  return `${cents < 0n ? '-' : ''}${whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${fraction}`
 }
 
 export function formatMoneyCents(value: MoneyCents, currency = 'BRL'): string {

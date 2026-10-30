@@ -153,10 +153,14 @@ export async function createFinanceServerRepository() {
     const { data: invoices, error } = invoiceResult
     if (error) throw new FinancePersistenceError('Não foi possível carregar as faturas.', 500)
     const invoiceIds = (invoices ?? []).map((invoice) => invoice.id)
-    const { data: items, error: itemsError } = invoiceIds.length ? await db.from('card_invoice_items').select('id,invoice_id,transaction_id,total_cents,transactions(description,occurred_at)').eq('user_id', user.id).in('invoice_id', invoiceIds) : { data: [], error: null }
-    if (itemsError) throw new FinancePersistenceError('Não foi possível carregar as compras das faturas.', 500)
+    const { data: items, error: itemsError } = invoiceIds.length ? await db.from('card_invoice_items').select('id,invoice_id,transaction_id,total_cents').eq('user_id', user.id).in('invoice_id', invoiceIds) : { data: [], error: null }
+    if (itemsError) throw new FinancePersistenceError(`Não foi possível carregar as compras das faturas. ${itemsError.message}`, 500)
+    const transactionIds = [...new Set((items ?? []).map((item) => item.transaction_id))]
+    const { data: transactions, error: transactionsError } = transactionIds.length ? await db.from('transactions').select('id,description,occurred_at').eq('user_id', user.id).in('id', transactionIds) : { data: [], error: null }
+    if (transactionsError) throw new FinancePersistenceError(`Não foi possível carregar as transações das compras. ${transactionsError.message}`, 500)
+    const transactionById = new Map((transactions ?? []).map((transaction) => [transaction.id, transaction]))
     const { data: payments, error: paymentsError } = invoiceIds.length ? await db.from('card_payments').select('invoice_id,paid_cents').eq('user_id', user.id).in('invoice_id', invoiceIds) : { data: [], error: null }
-    if (paymentsError) throw new FinancePersistenceError('Não foi possível carregar os pagamentos das faturas.', 500)
+    if (paymentsError) throw new FinancePersistenceError(`Não foi possível carregar os pagamentos das faturas. ${paymentsError.message}`, 500)
     const paid = new Map<string, bigint>()
     for (const payment of payments ?? []) paid.set(payment.invoice_id, (paid.get(payment.invoice_id) ?? 0n) + asMoney(payment.paid_cents))
     for (const invoice of invoices ?? []) { const historicalPaid = (invoice as { historical_paid_cents?: number | string | null }).historical_paid_cents; if (historicalPaid) paid.set(invoice.id, (paid.get(invoice.id) ?? 0n) + asMoney(historicalPaid)) }
@@ -165,7 +169,7 @@ export async function createFinanceServerRepository() {
     const cardByAccount = new Map((cardLookup.data ?? []).map((card) => [card.account_id, String(card.id)]))
     return (invoices ?? []).map((invoice) => ({
       id: String(invoice.id), cardId: cardByAccount.get(invoice.account_id) ?? null, accountId: String(invoice.account_id), periodStart: String(invoice.period_start), periodEnd: String(invoice.period_end), dueOn: String(invoice.due_on), totalCents: asMoney(invoice.total_cents), paidCents: paid.get(invoice.id) ?? 0n, status: String(invoice.status),
-      items: (items ?? []).filter((item) => item.invoice_id === invoice.id).map((item) => { const transaction = Array.isArray(item.transactions) ? item.transactions[0] : item.transactions as { description?: string; occurred_at?: string } | null; return { id: String(item.id), transactionId: String(item.transaction_id), description: transaction?.description ?? 'Compra no cartão', occurredOn: transaction?.occurred_at ? new Date(transaction.occurred_at).toISOString().slice(0, 10) : '', totalCents: asMoney(item.total_cents) } })
+      items: (items ?? []).filter((item) => item.invoice_id === invoice.id).map((item) => { const transaction = transactionById.get(item.transaction_id); return { id: String(item.id), transactionId: String(item.transaction_id), description: transaction?.description ?? 'Compra no cartão', occurredOn: transaction?.occurred_at ? new Date(transaction.occurred_at).toISOString().slice(0, 10) : '', totalCents: asMoney(item.total_cents) } })
     }))
   }
   async function createCard(input: Row) {

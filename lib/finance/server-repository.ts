@@ -135,7 +135,7 @@ export async function createFinanceServerRepository() {
     }) }
   }
   async function listInvoices(): Promise<FinanceInvoice[]> {
-    const { data: invoices, error } = await db.from('card_invoices').select('id,account_id,period_start,period_end,due_on,total_cents,status').eq('user_id', user.id).order('due_on', { ascending: false })
+    const { data: invoices, error } = await db.from('card_invoices').select('id,account_id,period_start,period_end,due_on,total_cents,status,historical_paid_cents').eq('user_id', user.id).order('due_on', { ascending: false })
     if (error) throw new FinancePersistenceError('Não foi possível carregar as faturas.', 500)
     const invoiceIds = (invoices ?? []).map((invoice) => invoice.id)
     const { data: items, error: itemsError } = invoiceIds.length ? await db.from('card_invoice_items').select('id,invoice_id,transaction_id,total_cents,transactions(description,occurred_at)').eq('user_id', user.id).in('invoice_id', invoiceIds) : { data: [], error: null }
@@ -144,6 +144,7 @@ export async function createFinanceServerRepository() {
     if (paymentsError) throw new FinancePersistenceError('Não foi possível carregar os pagamentos das faturas.', 500)
     const paid = new Map<string, bigint>()
     for (const payment of payments ?? []) paid.set(payment.invoice_id, (paid.get(payment.invoice_id) ?? 0n) + asMoney(payment.paid_cents))
+    for (const invoice of invoices ?? []) if (invoice.historical_paid_cents) paid.set(invoice.id, (paid.get(invoice.id) ?? 0n) + asMoney(invoice.historical_paid_cents))
     const cardLookup = await db.from('credit_cards').select('id,account_id').eq('user_id', user.id)
     if (cardLookup.error && !isMissingCreditCardsTable(cardLookup.error)) throw new FinancePersistenceError('Não foi possível relacionar as faturas aos cartões.', 500)
     const cardByAccount = new Map((cardLookup.data ?? []).map((card) => [card.account_id, String(card.id)]))
@@ -181,6 +182,20 @@ export async function createFinanceServerRepository() {
     if (amountCents <= 0n || !Number.isInteger(installmentCount) || installmentCount < 1 || installmentCount > 120) throw new FinancePersistenceError('Valor e quantidade de parcelas inválidos.')
     const result = await db.rpc('register_card_purchase', { p_card_id: cardId, p_invoice_id: invoiceId, p_category_id: categoryId, p_description: description, p_amount_cents: amountCents.toString(), p_occurred_on: occurredOn, p_installment_count: installmentCount, p_operation_key: operationKey, p_request_hash: requestHash })
     await throwIfError(result, 'Não foi possível registrar a compra na fatura.')
+    return result.data
+  }
+  async function registerExistingCardInvoice(input: Row) {
+    const cardId = requireText(input.cardId, 'Cartão', 80)
+    const periodStart = requireDate(input.periodStart, 'Início do período')
+    const periodEnd = requireDate(input.periodEnd, 'Fim do período')
+    const dueOn = requireDate(input.dueOn, 'Vencimento')
+    const totalCents = parseMoneyCents(input.totalCents as string | number | bigint)
+    const historicalPaidCents = parseMoneyCents((input.historicalPaidCents ?? '0') as string | number | bigint)
+    const operationKey = requireText(input.operationKey, 'Chave da operação', 200)
+    if (periodEnd < periodStart || totalCents < 0n || historicalPaidCents < 0n || historicalPaidCents > totalCents) throw new FinancePersistenceError('Período, total e valor pago inválidos.')
+    const requestHash = hashRequest({ cardId, periodStart, periodEnd, dueOn, totalCents: totalCents.toString(), historicalPaidCents: historicalPaidCents.toString(), userId: user.id })
+    const result = await db.rpc('register_existing_card_invoice', { p_card_id: cardId, p_period_start: periodStart, p_period_end: periodEnd, p_due_on: dueOn, p_total_cents: totalCents.toString(), p_historical_paid_cents: historicalPaidCents.toString(), p_operation_key: operationKey, p_request_hash: requestHash })
+    await throwIfError(result, 'Não foi possível cadastrar a fatura existente.')
     return result.data
   }
   async function registerHistoricalCardPurchaseImport(input: Row) {
@@ -295,5 +310,5 @@ export async function createFinanceServerRepository() {
     if (row.status !== 'posted' || !['income', 'expense'].includes(String(row.transaction_type))) throw new FinancePersistenceError('Somente receitas e despesas publicadas podem ser estornadas.')
     return createEntry({ accountId: row.account_id, categoryId: row.category_id, type: row.transaction_type === 'expense' ? 'income' : 'expense', amountCents: asMoney(row.amount_cents).toString(), effectiveOn: new Date().toISOString().slice(0, 10), description: `Estorno: ${row.description}`, idempotencyKey: `reversal:${originalId}`, originalTransactionId: originalId })
   }
-  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, registerCardPurchase, registerHistoricalCardPurchaseImport, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
+  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, registerCardPurchase, registerExistingCardInvoice, registerHistoricalCardPurchaseImport, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
 }

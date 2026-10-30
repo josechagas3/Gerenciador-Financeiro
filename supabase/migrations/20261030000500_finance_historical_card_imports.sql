@@ -45,7 +45,7 @@ create or replace function finance.register_historical_card_purchase_import(
 )
 returns table (import_id uuid, item_count integer, imported_total_cents bigint)
 language plpgsql
-security invoker
+security definer
 set search_path = finance, pg_temp
 as $$
 declare
@@ -123,6 +123,7 @@ begin
     returning * into v_item_row;
   end loop;
 
+  update finance.card_invoices set historical_import_pending = false, updated_at = now() where id = v_invoice.id;
   return query select v_import.id, v_import.item_count, v_import.imported_total_cents;
 end;
 $$;

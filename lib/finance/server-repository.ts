@@ -86,7 +86,7 @@ async function throwIfError(result: { error: { code?: string; message: string } 
   if (!result.error) return
   const { code, message } = result.error
   if (code === 'PGRST202' || code === '42883' || /register_existing_card_invoice.*(not found|does not exist)|function .*register_existing_card_invoice/i.test(message)) {
-    throw new FinancePersistenceError('A função de cadastro de fatura não está instalada no Supabase autorizado. Aplique a migration 20261030000600_finance_existing_invoice_registration.sql antes de tentar novamente.', 503)
+    throw new FinancePersistenceError('A função de cadastro de fatura não está instalada no Supabase autorizado. Aplique a migration 20261030000700_finance_reconcile_historical_invoices.sql antes de tentar novamente.', 503)
   }
   const status = code === '23503' ? 409 : code === '42501' ? 403 : 400
   const detail = process.env.NODE_ENV === 'development' ? ` Detalhe técnico [${code ?? 'sem código'}]: ${message}` : ''

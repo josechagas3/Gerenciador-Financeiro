@@ -183,6 +183,20 @@ export async function createFinanceServerRepository() {
     await throwIfError(result, 'Não foi possível registrar a compra na fatura.')
     return result.data
   }
+  async function registerHistoricalCardPurchaseImport(input: Row) {
+    const invoiceId = requireText(input.invoiceId, 'Fatura', 80)
+    const operationKey = requireText(input.operationKey, 'Chave da operação', 200)
+    if (!Array.isArray(input.items) || input.items.length === 0 || input.items.length > 500) throw new FinancePersistenceError('Adicione pelo menos um item histórico e respeite o limite de 500 itens.')
+    const items = input.items.map((item) => {
+      if (!item || typeof item !== 'object') throw new FinancePersistenceError('Item histórico inválido.')
+      const value = item as Row
+      return { description: requireText(value.description, 'Descrição da compra', 240), occurredOn: requireDate(value.occurredOn, 'Data da compra'), categoryId: requireText(value.categoryId, 'Categoria', 80), amountCents: parseMoneyCents(value.amountCents as string | number | bigint).toString() }
+    })
+    const requestHash = hashRequest({ invoiceId, items, userId: user.id })
+    const result = await db.rpc('register_historical_card_purchase_import', { p_invoice_id: invoiceId, p_operation_key: operationKey, p_request_hash: requestHash, p_items: items })
+    await throwIfError(result, 'Não foi possível importar as compras históricas.')
+    return result.data
+  }
   async function registerInvoicePayment(input: Row) {
     const invoiceId = requireText(input.invoiceId, 'Fatura', 80); const paymentTransactionId = requireText(input.paymentTransactionId, 'Lançamento do pagamento', 80); const operationKey = requireText(input.operationKey, 'Chave da operação', 200); const paidCents = parseMoneyCents(input.paidCents as string | number | bigint)
     if (paidCents <= 0n) throw new FinancePersistenceError('O pagamento deve ser maior que zero.')
@@ -281,5 +295,5 @@ export async function createFinanceServerRepository() {
     if (row.status !== 'posted' || !['income', 'expense'].includes(String(row.transaction_type))) throw new FinancePersistenceError('Somente receitas e despesas publicadas podem ser estornadas.')
     return createEntry({ accountId: row.account_id, categoryId: row.category_id, type: row.transaction_type === 'expense' ? 'income' : 'expense', amountCents: asMoney(row.amount_cents).toString(), effectiveOn: new Date().toISOString().slice(0, 10), description: `Estorno: ${row.description}`, idempotencyKey: `reversal:${originalId}`, originalTransactionId: originalId })
   }
-  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, registerCardPurchase, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
+  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, registerCardPurchase, registerHistoricalCardPurchaseImport, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
 }

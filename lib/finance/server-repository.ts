@@ -262,7 +262,18 @@ export async function createFinanceServerRepository() {
       const kind = String(value.kind ?? 'purchase')
       const amountCents = parseMoneyCents(value.amountCents as string | number | bigint)
       if (amountCents <= 0n) throw new FinancePersistenceError('Os valores da conciliação devem ser maiores que zero.')
-      return { kind, description: requireText(value.description, 'Descrição do item', 240), occurredOn: requireDate(value.occurredOn, 'Data do item'), categoryId: value.categoryId ? requireText(value.categoryId, 'Categoria', 80) : null, amountCents: amountCents.toString(), installmentCurrent: Number(value.installmentCurrent ?? 1), installmentCount: Number(value.installmentCount ?? 1) }
+      const baseItem = { kind, description: requireText(value.description, 'Descrição do item', 240), occurredOn: requireDate(value.occurredOn, 'Data do item'), categoryId: value.categoryId ? requireText(value.categoryId, 'Categoria', 80) : null, amountCents: amountCents.toString() }
+      const currentRaw = value.installmentCurrent == null ? '' : String(value.installmentCurrent).trim()
+      const countRaw = value.installmentCount == null ? '' : String(value.installmentCount).trim()
+      const hasInstallmentPosition = currentRaw !== '' || countRaw !== ''
+      if (!hasInstallmentPosition) {
+        if (kind === 'invoice_installment') throw new FinancePersistenceError(`Informe a parcela atual e o total para ${baseItem.description}.`)
+        return baseItem
+      }
+      const installmentCurrent = Number(currentRaw)
+      const installmentCount = Number(countRaw)
+      if (!Number.isInteger(installmentCurrent) || !Number.isInteger(installmentCount) || installmentCurrent < 1 || installmentCount < installmentCurrent || installmentCount > 120) throw new FinancePersistenceError(`Posição de parcela inválida para ${baseItem.description}.`)
+      return { ...baseItem, installmentCurrent, installmentCount }
     }) : []
     const payments = Array.isArray(input.payments) ? input.payments.map((payment) => {
       if (!payment || typeof payment !== 'object') throw new FinancePersistenceError('Pagamento de conciliação inválido.')

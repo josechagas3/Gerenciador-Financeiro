@@ -8,6 +8,7 @@ const itemKind = z.enum(['purchase', 'credit', 'refund', 'interest', 'iof', 'ann
 const modelItem = z.object({
   kind: itemKind,
   description: z.string(),
+  cardIdentifier: z.string().nullable(),
   occurredOn: z.string().nullable(),
   amount: z.string().describe('Valor decimal brasileiro sem símbolo, por exemplo 1234,56'),
   installmentCurrent: z.number().nullable(),
@@ -56,7 +57,7 @@ export async function extractInvoicePdf(file: Uint8Array, filename: string): Pro
     output: Output.object({ name: 'CardInvoiceExtraction', schema: modelExtractionSchema }),
     maxOutputTokens: 12000,
     temperature: 0,
-    instructions: 'Você extrai dados de faturas brasileiras. Nunca invente valores. Use null quando algo não estiver legível. Datas devem estar em YYYY-MM-DD. Separe pagamentos de compras: pagamentos nunca são itens de despesa. Para valores use vírgula decimal sem símbolo. Preserve sinais sem transformar créditos/estornos em receitas. Priorize o layout Sicredi, mas aceite outros layouts. Inclua avisos para qualquer ambiguidade, OCR ruim, campo ausente ou divergência aparente.',
+    instructions: 'Você extrai dados de faturas brasileiras. Nunca invente valores. Use null quando algo não estiver legível. Datas devem estar em YYYY-MM-DD. Separe pagamentos de compras: pagamentos nunca são itens de despesa. Para valores use vírgula decimal sem símbolo. Identifique o cartão de origem em cada item quando o PDF informar o final; cartões físico e virtual pertencem à mesma fatura. Preserve sinais sem transformar créditos/estornos em receitas. Priorize o layout Sicredi, mas aceite outros layouts. Inclua avisos para qualquer ambiguidade, OCR ruim, campo ausente ou divergência aparente.',
     messages: [{
       role: 'user',
       content: [

@@ -14,7 +14,7 @@ export function InvoiceAvailabilityNotice({ cards, invoices, refresh, onCreated 
   const [cardId, setCardId] = useState(cards[0]?.id ?? '')
   const [periodReference, setPeriodReference] = useState(''); const [closingDate, setClosingDate] = useState(''); const [dueOn, setDueOn] = useState(''); const [totalCents, setTotalCents] = useState(''); const [paidCents, setPaidCents] = useState(''); const [error, setError] = useState(''); const [done, setDone] = useState(false)
   const [imported, setImported] = useState<InvoicePdfImportData | null>(null)
-  const applyPdf = (value: InvoicePdfImportData) => { setImported(value); if (value.closingDate) { setClosingDate(value.closingDate); setPeriodReference(value.closingDate.slice(0, 7)) } if (value.dueDate) setDueOn(value.dueDate); if (value.totalAmount) setTotalCents(sanitizeMoneyInput(value.totalAmount)); const safelyClassified = value.payments.length > 0 && value.payments.every((payment) => payment.confidence >= 0.9); if (safelyClassified) setPaidCents(value.payments.reduce((sum, payment) => { try { return formatMoneyCents(BigInt(sum) + parseMoneyCents(payment.amount)) } catch { return sum } }, '0')); }
+  const applyPdf = (value: InvoicePdfImportData) => { setImported(value); if (value.dueDate) { setDueOn(value.dueDate); setPeriodReference(value.dueDate.slice(0, 7)) } else if (value.closingDate) setPeriodReference(value.closingDate.slice(0, 7)); if (value.closingDate) setClosingDate(value.closingDate); if (value.totalAmount) setTotalCents(sanitizeMoneyInput(value.totalAmount)); setPaidCents(''); }
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); setError('')
     try {

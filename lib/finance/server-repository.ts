@@ -268,7 +268,7 @@ export async function createFinanceServerRepository() {
       if (!payment || typeof payment !== 'object') throw new FinancePersistenceError('Pagamento de conciliação inválido.')
       const value = payment as Row
       const amountCents = parseMoneyCents(value.amountCents as string | number | bigint)
-      return { amountCents: amountCents.toString(), transactionId: requireText(value.transactionId, 'Lançamento do pagamento', 80), paidAt: value.paidAt ? requireDate(value.paidAt, 'Data do pagamento') : new Date().toISOString().slice(0, 10) }
+      return { amountCents: amountCents.toString(), transactionId: value.transactionId ? requireText(value.transactionId, 'Lançamento do pagamento', 80) : null, paidAt: value.paidAt ? requireDate(value.paidAt, 'Data do pagamento') : new Date().toISOString().slice(0, 10), description: requireText(value.description, 'Descrição do pagamento', 240), sourceType: value.sourceType === 'linked_transaction' ? 'linked_transaction' : 'historical_pdf' }
     }) : []
     if (openingBalanceCents < 0n || items.length > 500 || payments.length > 100) throw new FinancePersistenceError('A conciliação excede os limites permitidos.')
     const requestHash = hashRequest({ invoiceId, openingBalanceCents: openingBalanceCents.toString(), items, payments, userId: user.id })

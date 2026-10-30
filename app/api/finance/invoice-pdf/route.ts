@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { extractInvoicePdf } from '@/lib/finance/invoice-pdf-extractor'
+import { extractInvoicePdf, InvoicePdfExtractionError } from '@/lib/finance/invoice-pdf-extractor'
 import { createFinanceServerRepository, FinancePersistenceError } from '@/lib/finance/server-repository'
 
 const MAX_PDF_BYTES = 15 * 1024 * 1024
@@ -27,11 +27,12 @@ export async function POST(request: Request) {
     if (error instanceof FinancePersistenceError) return NextResponse.json({ error: error.message }, { status: error.status })
     const details = error instanceof Error ? error.message : String(error)
     const name = error instanceof Error ? error.name : 'UnknownError'
+    const extractionFailure = error instanceof InvoicePdfExtractionError
     const status = error && typeof error === 'object' && 'statusCode' in error && typeof error.statusCode === 'number' ? error.statusCode : undefined
-    console.error('[v0] Falha na importação de fatura PDF', { name, message: details.slice(0, 500), status })
+    console.error('[v0] Falha na importação de fatura PDF', { stage: extractionFailure ? error.stage : 'request-or-persistence', validationCompleted: extractionFailure ? error.validationCompleted : false, partialResponse: extractionFailure ? error.partialResponse : false, name, message: details.slice(0, 500), status })
     if (status === 401 || status === 403) return NextResponse.json({ error: 'O serviço de leitura do PDF não está autenticado no ambiente.' }, { status: 502 })
     if (status === 408 || status === 504 || /timeout|timed out/i.test(details)) return NextResponse.json({ error: 'A leitura do PDF demorou além do limite. Tente novamente com o mesmo arquivo.' }, { status: 504 })
-    if (/NoObjectGenerated|schema|validation|structured output/i.test(`${name} ${details}`)) return NextResponse.json({ error: 'O PDF foi recebido, mas os dados não puderam ser estruturados com segurança.' }, { status: 422 })
+    if (extractionFailure || /NoObjectGenerated|schema|validation|structured output/i.test(`${name} ${details}`)) return NextResponse.json({ error: 'O PDF foi recebido, mas os dados não puderam ser estruturados com segurança.' }, { status: 422 })
     return NextResponse.json({ error: 'O PDF foi recebido, mas o serviço de leitura não conseguiu processá-lo.' }, { status: 422 })
   }
 }

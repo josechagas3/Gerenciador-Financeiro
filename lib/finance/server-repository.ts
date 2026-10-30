@@ -92,6 +92,10 @@ function isMissingCreditCardsTable(error: { code?: string; message?: string } | 
   return error?.code === '42P01' || error?.code === 'PGRST205' || /credit_cards.*(does not exist|not found)|relation .*credit_cards/i.test(error?.message ?? '')
 }
 
+function isMissingHistoricalInvoiceColumns(error: { code?: string; message?: string } | null) {
+  return error?.code === '42703' || error?.code === 'PGRST204' || /historical_paid_cents|historical_import_pending/i.test(error?.message ?? '')
+}
+
 export async function createFinanceServerRepository() {
   const context = await getFinanceAuthContext()
   if (!context.user) throw new FinancePersistenceError('Autenticação necessária.', 401)
@@ -135,7 +139,13 @@ export async function createFinanceServerRepository() {
     }) }
   }
   async function listInvoices(): Promise<FinanceInvoice[]> {
-    const { data: invoices, error } = await db.from('card_invoices').select('id,account_id,period_start,period_end,due_on,total_cents,status,historical_paid_cents').eq('user_id', user.id).order('due_on', { ascending: false })
+    const historySelect = 'id,account_id,period_start,period_end,due_on,total_cents,status,historical_paid_cents'
+    const baseSelect = 'id,account_id,period_start,period_end,due_on,total_cents,status'
+    let invoiceResult = await db.from('card_invoices').select(historySelect).eq('user_id', user.id).order('due_on', { ascending: false })
+    if (invoiceResult.error && isMissingHistoricalInvoiceColumns(invoiceResult.error)) {
+      invoiceResult = await db.from('card_invoices').select(baseSelect).eq('user_id', user.id).order('due_on', { ascending: false })
+    }
+    const { data: invoices, error } = invoiceResult
     if (error) throw new FinancePersistenceError('Não foi possível carregar as faturas.', 500)
     const invoiceIds = (invoices ?? []).map((invoice) => invoice.id)
     const { data: items, error: itemsError } = invoiceIds.length ? await db.from('card_invoice_items').select('id,invoice_id,transaction_id,total_cents,transactions(description,occurred_at)').eq('user_id', user.id).in('invoice_id', invoiceIds) : { data: [], error: null }
@@ -144,7 +154,7 @@ export async function createFinanceServerRepository() {
     if (paymentsError) throw new FinancePersistenceError('Não foi possível carregar os pagamentos das faturas.', 500)
     const paid = new Map<string, bigint>()
     for (const payment of payments ?? []) paid.set(payment.invoice_id, (paid.get(payment.invoice_id) ?? 0n) + asMoney(payment.paid_cents))
-    for (const invoice of invoices ?? []) if (invoice.historical_paid_cents) paid.set(invoice.id, (paid.get(invoice.id) ?? 0n) + asMoney(invoice.historical_paid_cents))
+    for (const invoice of invoices ?? []) { const historicalPaid = (invoice as { historical_paid_cents?: number | string | null }).historical_paid_cents; if (historicalPaid) paid.set(invoice.id, (paid.get(invoice.id) ?? 0n) + asMoney(historicalPaid)) }
     const cardLookup = await db.from('credit_cards').select('id,account_id').eq('user_id', user.id)
     if (cardLookup.error && !isMissingCreditCardsTable(cardLookup.error)) throw new FinancePersistenceError('Não foi possível relacionar as faturas aos cartões.', 500)
     const cardByAccount = new Map((cardLookup.data ?? []).map((card) => [card.account_id, String(card.id)]))

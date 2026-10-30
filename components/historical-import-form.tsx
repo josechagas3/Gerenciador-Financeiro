@@ -22,7 +22,7 @@ const kinds: Array<{ value: ItemKind; label: string; sign: 'plus' | 'minus' }> =
   { value: 'needs_review', label: 'Revisar: possível fatura/parcelamento', sign: 'plus' },
   { value: 'invoice_installment', label: 'Parcelamento de fatura', sign: 'plus' },
 ]
-const blankItem = (): Item => ({ kind: 'purchase', description: '', cardIdentifier: null, occurredOn: '', categoryId: '', amountCents: '', installmentCurrent: '1', installmentCount: '1' })
+const blankItem = (): Item => ({ kind: 'purchase', description: '', cardIdentifier: null, occurredOn: '', categoryId: '', amountCents: '', installmentCurrent: '', installmentCount: '' })
 const blankPayment = (): Payment => ({ transactionId: '', paidAt: '', amountCents: '', description: '' })
 const money = (cents: bigint) => formatMoneyCents(cents)
 const absoluteMoneyCents = (value: string) => { const cents = parseMoneyCents(value || '0'); return cents < 0n ? -cents : cents }
@@ -32,6 +32,14 @@ export function HistoricalImportForm({ invoiceId, invoiceTotalCents, paidCents, 
   const [items, setItems] = useState<Item[]>(pendingImport?.items.map((item) => ({ kind: item.kind, description: item.description, cardIdentifier: item.cardIdentifier || null, occurredOn: item.occurredOn || '', categoryId: '', amountCents: item.amount, installmentCurrent: item.installmentCurrent == null ? '' : String(item.installmentCurrent), installmentCount: item.installmentTotal == null ? '' : String(item.installmentTotal) })) || [blankItem()])
   const [payments, setPayments] = useState<Payment[]>(pendingImport?.payments.map((payment) => ({ transactionId: '', paidAt: payment.paidAt || '', amountCents: payment.amount, description: payment.description })) || [])
   const [error, setError] = useState('')
+  const invalidInstallmentItems = items.filter((item) => {
+    if (item.kind === 'invoice_installment') return !Number.isInteger(Number(item.installmentCurrent)) || Number(item.installmentCurrent) < 1 || !Number.isInteger(Number(item.installmentCount)) || Number(item.installmentCount) < Number(item.installmentCurrent)
+    if (item.kind !== 'purchase') return false
+    const hasInstallmentFields = item.installmentCurrent.trim() !== '' || item.installmentCount.trim() !== ''
+    if (!hasInstallmentFields) return false
+    const installmentCount = Number(item.installmentCount)
+    return !Number.isInteger(Number(item.installmentCurrent)) || Number(item.installmentCurrent) < 1 || !Number.isInteger(installmentCount) || installmentCount < 2 || Number(item.installmentCurrent) > installmentCount
+  })
   const [done, setDone] = useState(false)
   useEffect(() => {
     if (!pendingImport) return
@@ -64,7 +72,7 @@ export function HistoricalImportForm({ invoiceId, invoiceTotalCents, paidCents, 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); setError('')
     if (items.some((item) => item.kind === 'needs_review')) { setError('Revise o lançamento marcado como possível pagamento ou parcelamento de fatura antes de confirmar.'); return }
-    if (items.some((item) => ['purchase', 'invoice_installment'].includes(item.kind) && (!Number.isInteger(Number(item.installmentCurrent)) || Number(item.installmentCurrent) < 1 || !Number.isInteger(Number(item.installmentCount)) || Number(item.installmentCount) < Number(item.installmentCurrent)))) { setError('Revise a parcela atual e o total de parcelas de cada compra ou parcelamento de fatura.'); return }
+    if (invalidInstallmentItems.length > 0) { setError(`Revise as parcelas: ${invalidInstallmentItems.map((item) => `${item.description || 'Sem descrição'} (${item.kind}): ${item.installmentCurrent || 'vazio'}/${item.installmentCount || 'vazio'}`).join('; ')}.`); return }
     if (!allPaymentsValid) { setError('Revise data, descrição e valor de cada pagamento antes de confirmar.'); return }
     if (differenceCents !== 0n) { setError(`A conciliação precisa fechar em ${money(invoiceTotalCentsValue)}. Diferença atual: ${money(differenceCents)}.`); return }
     try {

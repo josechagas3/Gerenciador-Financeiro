@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { formatMoneyCents, formatMoneyInput, parseMoneyCents, sanitizeMoneyInput } from '@/lib/finance/domain'
 import { InvoicePdfImport, type InvoicePdfImportData } from './invoice-pdf-import'
 
-type ItemKind = 'purchase' | 'credit' | 'refund' | 'interest' | 'iof' | 'annual_fee' | 'fee' | 'other_charge' | 'needs_review'
+type ItemKind = 'purchase' | 'credit' | 'refund' | 'interest' | 'iof' | 'annual_fee' | 'fee' | 'other_charge' | 'needs_review' | 'invoice_installment'
 type Item = { kind: ItemKind; description: string; cardIdentifier: string | null; occurredOn: string; categoryId: string; amountCents: string; installmentCurrent: string; installmentCount: string }
 type Payment = { transactionId: string; paidAt: string; amountCents: string }
 type PaymentCandidate = { id: string; description: string; effectiveOn: string; amountCents: string; accountName: string; categoryName: string }
@@ -20,6 +20,7 @@ const kinds: Array<{ value: ItemKind; label: string; sign: 'plus' | 'minus' }> =
   { value: 'fee', label: 'Tarifa', sign: 'plus' },
   { value: 'other_charge', label: 'Outro encargo', sign: 'plus' },
   { value: 'needs_review', label: 'Revisar: possível fatura/parcelamento', sign: 'plus' },
+  { value: 'invoice_installment', label: 'Parcelamento de fatura', sign: 'plus' },
 ]
 const blankItem = (): Item => ({ kind: 'purchase', description: '', cardIdentifier: null, occurredOn: '', categoryId: '', amountCents: '', installmentCurrent: '1', installmentCount: '1' })
 const blankPayment = (): Payment => ({ transactionId: '', paidAt: '', amountCents: '' })

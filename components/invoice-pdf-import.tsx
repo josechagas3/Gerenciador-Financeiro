@@ -4,13 +4,13 @@ import { useMemo, useState } from 'react'
 import { FileUp, LoaderCircle, X } from 'lucide-react'
 import { formatMoneyCents, parseMoneyCents, sanitizeMoneyInput } from '@/lib/finance/domain'
 
-type ItemKind = 'purchase' | 'credit' | 'refund' | 'interest' | 'iof' | 'annual_fee' | 'fee' | 'other_charge' | 'needs_review'
+type ItemKind = 'purchase' | 'credit' | 'refund' | 'interest' | 'iof' | 'annual_fee' | 'fee' | 'other_charge' | 'needs_review' | 'invoice_installment'
 type ImportedItem = { kind: ItemKind; description: string; cardIdentifier: string | null; occurredOn: string | null; amount: string; installmentCurrent: number | null; installmentTotal: number | null; confidence: number }
 type Extraction = { bankName: string | null; cardIdentifier: string | null; invoiceNumber: string | null; closingDate: string | null; dueDate: string | null; totalAmount: string | null; openingBalance: string | null; items: ImportedItem[]; payments: Array<{ description: string; paidAt: string | null; amount: string; confidence: number }>; warnings: string[] }
 export type InvoicePdfImportData = { bankName: string | null; cardIdentifier: string | null; closingDate: string | null; dueDate: string | null; totalAmount: string | null; openingBalance: string | null; items: ImportedItem[]; payments: Array<{ description: string; paidAt: string | null; amount: string; confidence: number }> }
 type Props = { invoiceId?: string; invoiceTotalCents?: string; paidCents?: string; onApply: (value: InvoicePdfImportData) => void }
 
-const labels: Record<ItemKind, string> = { purchase: 'Compra', credit: 'Crédito', refund: 'Estorno', interest: 'Juros', iof: 'IOF', annual_fee: 'Anuidade', fee: 'Tarifa', other_charge: 'Outro encargo', needs_review: 'Revisar: possível fatura/parcelamento' }
+const labels: Record<ItemKind, string> = { purchase: 'Compra', credit: 'Crédito', refund: 'Estorno', interest: 'Juros', iof: 'IOF', annual_fee: 'Anuidade', fee: 'Tarifa', other_charge: 'Outro encargo', needs_review: 'Revisar: possível fatura/parcelamento', invoice_installment: 'Parcelamento de fatura' }
 const moneyToCents = (value: string | null | undefined) => { try { return parseMoneyCents(value || '0') } catch { return 0n } }
 const absoluteCents = (value: string | null | undefined) => { const cents = moneyToCents(value); return cents < 0n ? -cents : cents }
 const signedItemCents = (item: ImportedItem) => ['credit', 'refund'].includes(item.kind) ? -absoluteCents(item.amount) : absoluteCents(item.amount)

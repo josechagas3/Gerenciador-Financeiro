@@ -150,7 +150,7 @@ export async function createFinanceServerRepository() {
     const baseSelect = 'id,account_id,period_start,period_end,due_on,total_cents,status'
     let invoiceResult = await db.from('card_invoices').select(historySelect).eq('user_id', user.id).order('due_on', { ascending: false })
     if (invoiceResult.error && isMissingHistoricalInvoiceColumns(invoiceResult.error)) {
-      invoiceResult = await db.from('card_invoices').select(baseSelect).eq('user_id', user.id).order('due_on', { ascending: false })
+      invoiceResult = await db.from('card_invoices').select(baseSelect).eq('user_id', user.id).order('due_on', { ascending: false }) as typeof invoiceResult
     }
     const { data: invoices, error } = invoiceResult
     if (error) throw new FinancePersistenceError('Não foi possível carregar as faturas.', 500)
@@ -242,7 +242,7 @@ export async function createFinanceServerRepository() {
     if (paidCents <= 0n) throw new FinancePersistenceError('O pagamento deve ser maior que zero.')
     const invoice = await db.from('card_invoices').select('id').eq('id', invoiceId).eq('user_id', user.id).single(); await throwIfError(invoice, 'Não foi possível localizar a fatura.')
     const transaction = await db.from('transactions').select('id,transaction_type,status').eq('id', paymentTransactionId).eq('user_id', user.id).single(); await throwIfError(transaction, 'Não foi possível localizar o lançamento do pagamento.')
-    if (transaction.data?.status !== 'posted' || transaction.data?.transaction_type !== 'transfer') throw new FinancePersistenceError('O pagamento da fatura deve ser um lançamento de transferência publicado.')
+    if (transaction.data?.status !== 'posted' || transaction.data?.transaction_type !== 'income') throw new FinancePersistenceError('O pagamento da fatura deve ser um crédito em conta publicado.')
     const result = await db.from('card_payments').insert({ invoice_id: invoiceId, payment_transaction_id: paymentTransactionId, paid_cents: paidCents.toString(), paid_at: new Date().toISOString(), operation_key: operationKey, user_id: user.id }).select('id,invoice_id,payment_transaction_id,paid_cents,paid_at,operation_key').single()
     await throwIfError(result, 'Não foi possível registrar o pagamento da fatura.')
     return result.data
@@ -262,7 +262,7 @@ export async function createFinanceServerRepository() {
       const kind = String(value.kind ?? 'purchase')
       const amountCents = parseMoneyCents(value.amountCents as string | number | bigint)
       if (amountCents <= 0n) throw new FinancePersistenceError('Os valores da conciliação devem ser maiores que zero.')
-      return { kind, description: requireText(value.description, 'Descrição do item', 240), occurredOn: requireDate(value.occurredOn, 'Data do item'), categoryId: value.categoryId ? requireText(value.categoryId, 'Categoria', 80) : null, amountCents: amountCents.toString(), installmentCount: Number(value.installmentCount ?? 1) }
+      return { kind, description: requireText(value.description, 'Descrição do item', 240), occurredOn: requireDate(value.occurredOn, 'Data do item'), categoryId: value.categoryId ? requireText(value.categoryId, 'Categoria', 80) : null, amountCents: amountCents.toString(), installmentCurrent: Number(value.installmentCurrent ?? 1), installmentCount: Number(value.installmentCount ?? 1) }
     }) : []
     const payments = Array.isArray(input.payments) ? input.payments.map((payment) => {
       if (!payment || typeof payment !== 'object') throw new FinancePersistenceError('Pagamento de conciliação inválido.')

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { formatMoneyCents, formatMoneyInput, parseMoneyCents, sanitizeMoneyInput } from '@/lib/finance/domain'
 import { InvoicePdfImport, type InvoicePdfImportData } from './invoice-pdf-import'
 
@@ -30,6 +30,13 @@ export function HistoricalImportForm({ invoiceId, invoiceTotalCents, paidCents, 
   const [payments, setPayments] = useState<Payment[]>(pendingImport?.payments.map((payment) => ({ transactionId: '', paidAt: payment.paidAt || '', amountCents: payment.amount })) || [])
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
+  useEffect(() => {
+    if (!pendingImport) return
+    setOpeningBalance(pendingImport.openingBalance || '')
+    setItems(pendingImport.items.map((item) => ({ kind: item.kind, description: item.description, cardIdentifier: item.cardIdentifier || null, occurredOn: item.occurredOn || '', categoryId: '', amountCents: item.amount, installmentCount: String(item.installmentTotal || 1) })))
+    setPayments(pendingImport.payments.map((payment) => ({ transactionId: '', paidAt: payment.paidAt || '', amountCents: payment.amount })))
+    setDone(false)
+  }, [pendingImport, invoiceId])
   const total = useMemo(() => {
     let value = 0n
     try { value += absoluteMoneyCents(openingBalance) } catch {}

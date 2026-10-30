@@ -22,6 +22,7 @@ const kinds: Array<{ value: ItemKind; label: string; sign: 'plus' | 'minus' }> =
 const blankItem = (): Item => ({ kind: 'purchase', description: '', cardIdentifier: null, occurredOn: '', categoryId: '', amountCents: '', installmentCount: '1' })
 const blankPayment = (): Payment => ({ transactionId: '', paidAt: '', amountCents: '' })
 const money = (cents: bigint) => formatMoneyCents(cents)
+const absoluteMoneyCents = (value: string) => { const cents = parseMoneyCents(value || '0'); return cents < 0n ? -cents : cents }
 
 export function HistoricalImportForm({ invoiceId, invoiceTotalCents, paidCents, categories, transactions, refresh, pendingImport }: Props) {
   const [openingBalance, setOpeningBalance] = useState(pendingImport?.openingBalance || '')
@@ -31,9 +32,9 @@ export function HistoricalImportForm({ invoiceId, invoiceTotalCents, paidCents, 
   const [done, setDone] = useState(false)
   const total = useMemo(() => {
     let value = 0n
-    try { value += parseMoneyCents(openingBalance || '0') } catch {}
-    for (const item of items) { try { value += ['credit', 'refund'].includes(item.kind) ? -parseMoneyCents(item.amountCents || '0') : parseMoneyCents(item.amountCents || '0') } catch {} }
-    for (const payment of payments) { try { value -= parseMoneyCents(payment.amountCents || '0') } catch {} }
+    try { value += absoluteMoneyCents(openingBalance) } catch {}
+    for (const item of items) { try { value += ['credit', 'refund'].includes(item.kind) ? -absoluteMoneyCents(item.amountCents) : absoluteMoneyCents(item.amountCents) } catch {} }
+    for (const payment of payments) { try { value -= absoluteMoneyCents(payment.amountCents) } catch {} }
     try { value -= BigInt(paidCents) } catch {}
     return value
   }, [openingBalance, items, payments, paidCents])
@@ -46,7 +47,7 @@ export function HistoricalImportForm({ invoiceId, invoiceTotalCents, paidCents, 
     event.preventDefault(); setError('')
     if (difference !== 0n) { setError(`A conciliação precisa fechar em ${money(invoiceTotal)}. Diferença atual: ${money(difference)}.`); return }
     try {
-      const response = await fetch('/api/finance', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resource: 'invoices', action: 'historical-reconcile', data: { invoiceId, openingBalanceCents: parseMoneyCents(openingBalance || '0').toString(), items: items.filter((item) => item.description && item.amountCents).map((item) => ({ ...item, description: item.cardIdentifier ? `[Cartão final ${item.cardIdentifier}] ${item.description}` : item.description, amountCents: parseMoneyCents(item.amountCents).toString(), installmentCount: Number(item.installmentCount || 1) })), payments: payments.filter((payment) => payment.transactionId && payment.amountCents).map((payment) => ({ ...payment, amountCents: parseMoneyCents(payment.amountCents).toString() })), operationKey: crypto.randomUUID() } }) })
+      const response = await fetch('/api/finance', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resource: 'invoices', action: 'historical-reconcile', data: { invoiceId, openingBalanceCents: absoluteMoneyCents(openingBalance).toString(), items: items.filter((item) => item.description && item.amountCents).map((item) => ({ ...item, description: item.cardIdentifier ? `[Cartão final ${item.cardIdentifier}] ${item.description}` : item.description, amountCents: absoluteMoneyCents(item.amountCents).toString(), installmentCount: Number(item.installmentCount || 1) })), payments: payments.filter((payment) => payment.transactionId && payment.amountCents).map((payment) => ({ ...payment, amountCents: absoluteMoneyCents(payment.amountCents).toString() })), operationKey: crypto.randomUUID() } }) })
       const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.error ?? 'Não foi possível conciliar a fatura.')
       setDone(true); await refresh()
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível conciliar a fatura.') }

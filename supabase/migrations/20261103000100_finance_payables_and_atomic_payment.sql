@@ -11,10 +11,11 @@ create table if not exists finance.payables (
   constraint payables_paid_fields_check check ((status = 'paid' and paid_account_id is not null and paid_transaction_id is not null and paid_cents is not null and paid_on is not null) or (status <> 'paid' and paid_account_id is null and paid_transaction_id is null and paid_cents is null and paid_on is null))
 );
 create index if not exists payables_user_status_due_idx on finance.payables(user_id, status, due_on);
+grant select, insert, update on finance.payables to authenticated;
 alter table finance.payables enable row level security;
-create policy payables_select_own on finance.payables for select using (auth.uid() = user_id);
-create policy payables_insert_own on finance.payables for insert with check (auth.uid() = user_id);
-create policy payables_update_own on finance.payables for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy payables_select_own on finance.payables for select to authenticated using (auth.uid() = user_id);
+create policy payables_insert_own on finance.payables for insert to authenticated with check (auth.uid() = user_id);
+create policy payables_update_own on finance.payables for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create or replace function finance.create_payable(p_category_id uuid, p_amount_cents bigint, p_due_on date, p_description text, p_notes text, p_operation_key text, p_request_hash text) returns finance.payables language plpgsql security invoker set search_path = '' as $$
 declare v_user_id uuid := auth.uid(); v_existing finance.payables; v_created finance.payables;

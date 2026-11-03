@@ -147,7 +147,8 @@ input, select, textarea { max-width: 100%; }
   .breadcrumb { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .breadcrumb strong { overflow: hidden; text-overflow: ellipsis; }
   .topbar-actions { gap: 8px; }
-  .topbar-actions .icon-button { display: none; }
+  .topbar-actions .icon-button, .topbar-actions .avatar { display: none; }
+  .breadcrumb span, .breadcrumb svg { display: none; }
   .welcome-copy { line-height: 1.5; }
   .panel-heading { gap: 12px; flex-wrap: wrap; }
   .panel-heading > * { min-width: 0; }
@@ -194,8 +195,10 @@ input, select, textarea { max-width: 100%; }
   .pdf-items input, .pdf-items select { min-height: 50px; font-size: 16px; }
   .panel { padding: 18px 16px; }
   .metrics-grid { gap: 12px; }
-  .metric-card { padding: 18px 16px; min-height: 145px; }
-  .summary-bars div { padding: 16px; }
+  .metric-card { padding: 16px; min-height: 128px; }
+  .metric-card:first-child { border: 2px solid #9bd8b5; background: linear-gradient(145deg, #ffffff 0%, #f0fbf4 100%); box-shadow: 0 8px 22px rgba(28, 126, 79, .12); }
+  .metric-card:first-child .metric-value { font-size: 22px; color: #167246; }
+  .summary-bars div { padding: 14px; }
   .error-message, .form-error, [role="alert"] { font-size: 14px; line-height: 1.5; }
 }
 

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import useSWR from 'swr'
-import { ArrowDownLeft, ArrowUpRight, BarChart3, Bell, ChevronRight, CreditCard, FileText, LayoutDashboard, Menu, PiggyBank, Plus, ReceiptText, Settings2, Tags, Wallet, X } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, BarChart3, Bell, CalendarDays, ChevronRight, CreditCard, FileText, Flag, LayoutDashboard, Menu, PiggyBank, Plus, ReceiptText, Settings2, Tags, Wallet, X } from 'lucide-react'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { CardsView } from '@/components/cards-and-invoices'
 import { ReportsView, SettingsView } from '@/components/finance-modules'

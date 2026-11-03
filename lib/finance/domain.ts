@@ -118,7 +118,7 @@ export function formatMoneyCents(value: MoneyCents, currency = 'BRL'): string {
   return `${negative ? '-' : ''}${symbol} ${groupedWhole},${cents}`
 }
 
-export function summarizeEntries(entries: Pick<FinancialEntry, 'type' | 'status' | 'amountCents'>): FinanceSummary {
+export function summarizeEntries(entries: Array<Pick<FinancialEntry, 'type' | 'status' | 'amountCents'>>): FinanceSummary {
   let balanceCents = 0n
   let incomeCents = 0n
   let expenseCents = 0n

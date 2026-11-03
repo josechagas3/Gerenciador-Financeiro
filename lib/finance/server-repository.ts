@@ -43,6 +43,21 @@ export type FinanceSnapshot = {
   cards: FinanceCard[]
   invoices: FinanceInvoice[]
   cardsAvailable: boolean
+  payables: FinancePayable[]
+}
+
+export type FinancePayable = {
+  id: string
+  categoryId: string | null
+  description: string
+  amountCents: MoneyCents
+  dueOn: string
+  notes: string | null
+  status: 'pending' | 'paid' | 'cancelled'
+  paidAccountId: string | null
+  paidTransactionId: string | null
+  paidCents: MoneyCents | null
+  paidOn: string | null
 }
 
 type Row = Record<string, unknown>
@@ -285,8 +300,43 @@ export async function createFinanceServerRepository() {
     await throwIfError(result, 'Não foi possível conciliar a fatura histórica.')
     return result.data
   }
+  function mapPayable(row: Row): FinancePayable {
+    return { id: String(row.id), categoryId: row.category_id ? String(row.category_id) : null, description: String(row.description), amountCents: asMoney(row.amount_cents), dueOn: String(row.due_on), notes: row.notes ? String(row.notes) : null, status: row.status as FinancePayable['status'], paidAccountId: row.paid_account_id ? String(row.paid_account_id) : null, paidTransactionId: row.paid_transaction_id ? String(row.paid_transaction_id) : null, paidCents: row.paid_cents == null ? null : asMoney(row.paid_cents), paidOn: row.paid_on ? String(row.paid_on) : null }
+  }
+
+  async function listPayables() {
+    const result = await db.from('payables').select('id,category_id,description,amount_cents,due_on,notes,status,paid_account_id,paid_transaction_id,paid_cents,paid_on').eq('user_id', user.id).order('due_on', { ascending: true })
+    if (result.error) throw new FinancePersistenceError('Não foi possível carregar as contas a pagar.', 500)
+    return (result.data ?? []).map(mapPayable)
+  }
+
+  async function createPayable(input: Row) {
+    const amountCents = parseMoneyCents(input.amountCents as string | number | bigint)
+    const dueOn = requireDate(input.dueOn, 'Data de vencimento')
+    const description = requireText(input.description, 'Descrição', 240)
+    const operationKey = requireText(input.operationKey, 'Chave da operação', 200)
+    if (amountCents <= 0n) throw new FinancePersistenceError('O valor deve ser maior que zero.')
+    const requestHash = hashRequest({ categoryId: input.categoryId ?? null, amountCents: amountCents.toString(), dueOn, description, notes: input.notes ?? null, userId: user.id })
+    const result = await db.rpc('create_payable', { p_category_id: input.categoryId || null, p_amount_cents: amountCents.toString(), p_due_on: dueOn, p_description: description, p_notes: input.notes ? requireText(input.notes, 'Observação', 500) : null, p_operation_key: operationKey, p_request_hash: requestHash })
+    await throwIfError(result, 'Não foi possível cadastrar a conta pendente.')
+    return mapPayable(result.data as Row)
+  }
+
+  async function payPayable(input: Row) {
+    const payableId = requireText(input.payableId, 'Conta pendente', 80)
+    const accountId = requireText(input.accountId, 'Conta de pagamento', 80)
+    const paidOn = requireDate(input.paidOn, 'Data do pagamento')
+    const paidCents = parseMoneyCents(input.paidCents as string | number | bigint)
+    const operationKey = requireText(input.operationKey, 'Chave da operação', 200)
+    if (paidCents <= 0n) throw new FinancePersistenceError('O valor pago deve ser maior que zero.')
+    const requestHash = hashRequest({ payableId, accountId, paidCents: paidCents.toString(), paidOn, userId: user.id })
+    const result = await db.rpc('pay_payable', { p_payable_id: payableId, p_account_id: accountId, p_paid_cents: paidCents.toString(), p_paid_on: paidOn, p_operation_key: operationKey, p_request_hash: requestHash })
+    await throwIfError(result, 'Não foi possível marcar a conta como paga.')
+    return mapPayable(result.data as Row)
+  }
+
   async function snapshot(): Promise<FinanceSnapshot> {
-    const [accounts, categories, movements, cardResult, invoices] = await Promise.all([listAccounts(), listCategories(), listMovements(), listCards(), listInvoices()])
+    const [accounts, categories, movements, cardResult, invoices, payables] = await Promise.all([listAccounts(), listCategories(), listMovements(), listCards(), listInvoices(), listPayables()])
     const cards = cardResult.cards
     const balances = new Map<string, bigint>()
     for (const movement of movements) {
@@ -294,7 +344,7 @@ export async function createFinanceServerRepository() {
       const signedAmount = movement.type === 'expense' ? -movement.amountCents : movement.amountCents
       balances.set(movement.accountId, (balances.get(movement.accountId) ?? 0n) + signedAmount)
     }
-    return { accounts: accounts.map((account) => ({ ...account, balanceCents: balances.get(account.id) ?? 0n })), categories, movements, cards, invoices, cardsAvailable: cardResult.available }
+    return { accounts: accounts.map((account) => ({ ...account, balanceCents: balances.get(account.id) ?? 0n })), categories, movements, cards, invoices, cardsAvailable: cardResult.available, payables }
   }
   async function createAccount(input: Row) {
     const name = requireText(input.name, 'Nome da conta', 120)
@@ -373,5 +423,5 @@ export async function createFinanceServerRepository() {
     if (row.status !== 'posted' || !['income', 'expense'].includes(String(row.transaction_type))) throw new FinancePersistenceError('Somente receitas e despesas publicadas podem ser estornadas.')
     return createEntry({ accountId: row.account_id, categoryId: row.category_id, type: row.transaction_type === 'expense' ? 'income' : 'expense', amountCents: asMoney(row.amount_cents).toString(), effectiveOn: new Date().toISOString().slice(0, 10), description: `Estorno: ${row.description}`, idempotencyKey: `reversal:${originalId}`, originalTransactionId: originalId })
   }
-  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, deleteInvoice, registerCardPurchase, registerExistingCardInvoice, registerHistoricalCardPurchaseImport, reconcileHistoricalInvoice, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry }
+  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, deleteInvoice, registerCardPurchase, registerExistingCardInvoice, registerHistoricalCardPurchaseImport, reconcileHistoricalInvoice, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry, createPayable, payPayable }
 }

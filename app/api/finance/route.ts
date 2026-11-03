@@ -44,6 +44,8 @@ export async function POST(request: Request) {
     else if (body.resource === 'transactions' && body.action === 'create') result = await repository.createEntry(data)
     else if (body.resource === 'transactions' && body.action === 'reverse') result = await repository.reverseEntry(body.id)
     else if (body.resource === 'transactions' && body.action === 'cancel') result = await repository.cancelEntry(body.id)
+    else if (body.resource === 'payables' && body.action === 'create') result = await repository.createPayable(data)
+    else if (body.resource === 'payables' && body.action === 'pay') result = await repository.payPayable(data)
     else return NextResponse.json({ error: 'Operação financeira inválida.' }, { status: 400 })
     return NextResponse.json(jsonData({ result }), { status: 201 })
   } catch (error) { return jsonError(error) }

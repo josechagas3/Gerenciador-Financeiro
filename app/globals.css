@@ -213,3 +213,94 @@ input, select, textarea { max-width: 100%; }
   .panel-heading { align-items: flex-start; }
   .panel-heading h2 { max-width: 100%; }
 }
+
+/* Desktop finance workspace scale: keeps the compact mobile system intact. */
+@media (min-width: 901px) {
+  .sidebar { width: 268px; padding: 30px 17px 22px; }
+  .brand-row { padding: 0 14px 40px; }
+  .sidebar-label { font-size: 12px; padding-inline: 15px; }
+  .nav-list { gap: 6px; }
+  .nav-item { gap: 13px; padding: 13px 15px; font-size: 15px; border-radius: 10px; }
+  .active-indicator { height: 23px; }
+  .security-note { padding-inline: 14px; }
+  .security-note strong, .security-note span { font-size: 12px; }
+  .security-note strong { font-size: 13px; }
+  .main-content { margin-left: 268px; }
+  .topbar { height: 78px; padding-inline: clamp(30px, 3.2vw, 58px); }
+  .breadcrumb { font-size: 14px; }
+  .avatar { width: 36px; height: 36px; font-size: 12px; }
+  .page-wrapper { width: 94%; max-width: 1600px; padding: 44px 0 56px; }
+  .welcome-row { margin-bottom: 34px; }
+  .eyebrow { font-size: 13px; margin-bottom: 10px; }
+  h1 { font-size: clamp(29px, 2.1vw, 34px); }
+  .welcome-copy { font-size: 15px; margin-top: 10px; }
+  .primary-button, .outline-button, .banner-button, .text-button { border-radius: 9px; font-size: 14px; padding: 13px 18px; }
+  .metrics-grid { gap: 20px; margin-bottom: 22px; }
+  .metric-card { min-height: 174px; padding: 23px 24px 21px; border-radius: 14px; }
+  .metric-icon { width: 44px; height: 44px; border-radius: 12px; margin-bottom: 23px; }
+  .metric-icon svg { width: 22px; height: 22px; }
+  .metric-label { font-size: 13px; margin-bottom: 8px; }
+  .metric-value { font-size: clamp(25px, 2vw, 30px); }
+  .metric-helper { font-size: 12px; margin-top: 9px; }
+  .content-grid, .lower-grid { gap: 22px; margin-bottom: 22px; }
+  .panel { min-height: 320px; padding: 27px 28px; border-radius: 14px; }
+  .panel-heading h2 { font-size: 20px; }
+  .panel-heading p { font-size: 13px; margin-top: 8px; }
+  .panel-heading-icon { width: 24px; height: 24px; }
+  .select-button, .more-button { padding: 9px 11px; font-size: 12px; }
+  .chart-empty { height: 216px; }
+  .chart-illustration, .empty-state-icon { width: 52px; height: 52px; border-radius: 14px; margin-bottom: 15px; }
+  .chart-empty strong, .empty-state-title { font-size: 14px; }
+  .chart-empty span, .empty-state-description { font-size: 13px; margin-top: 8px; line-height: 1.5; }
+  .summary-bars { gap: 14px; margin-top: 44px; }
+  .summary-bars div { padding: 17px; }
+  .summary-bars span { font-size: 12px; margin-bottom: 9px; }
+  .summary-bars strong { font-size: 18px; }
+  .activity-panel, .due-panel { min-height: 285px; }
+  .link-button, .demo-note { font-size: 12px; }
+  .demo-note { margin-top: 34px; }
+  .info-banner { margin-top: 22px; padding: 18px 21px; gap: 15px; border-radius: 12px; }
+  .info-banner-icon { width: 38px; height: 38px; border-radius: 10px; }
+  .info-banner strong { font-size: 14px; }
+  .info-banner span { font-size: 12px; margin-top: 5px; }
+  .banner-button { font-size: 12px; }
+  .module-grid { display: grid; grid-template-columns: minmax(330px, .8fr) minmax(0, 1.4fr); gap: 22px; margin-bottom: 22px; }
+  .form-panel form { gap: 17px; margin-top: 26px; }
+  .form-field { gap: 8px; font-size: 13px; }
+  .form-field input, .form-field select, .filter-grid input, .filter-grid select { border-radius: 9px; font-size: 14px; padding: 13px 14px; }
+  .field-row { gap: 14px; }
+  .account-list, .category-list, .movement-list { gap: 3px; margin-top: 24px; }
+  .account-row, .category-row, .movement-row { gap: 14px; padding: 15px 0; }
+  .account-row strong, .category-row strong, .movement-row strong { font-size: 15px; }
+  .account-row small, .category-row small, .movement-row small { font-size: 12px; margin-top: 5px; }
+  .account-row b, .movement-row b { font-size: 15px; }
+  .account-icon, .movement-icon { width: 38px; height: 38px; border-radius: 11px; }
+  .small-button { font-size: 12px; }
+  .filter-grid { gap: 10px; margin: 24px 0 9px; }
+  .filter-grid input, .filter-grid select { font-size: 13px; padding: 11px; }
+  .planning-layout { gap: 22px; }
+  .planning-header-panel h2 { font-size: 21px; }
+  .planning-help { font-size: 13px; }
+  .planning-toolbar { gap: 12px; margin: 20px 0; }
+  .planning-filter { gap: 7px; font-size: 12px; }
+  .planning-filter input, .planning-filter select { font-size: 13px; padding: 10px 12px; }
+  .planning-summary { gap: 12px; margin-bottom: 20px; }
+  .planning-summary div { padding: 16px; }
+  .planning-summary span { font-size: 12px; margin-bottom: 8px; }
+  .planning-summary strong { font-size: 16px; }
+  .planned-list { padding-inline: 22px; }
+  .planned-row { min-height: 76px; gap: 13px; }
+  .planned-details strong { font-size: 15px; }
+  .planned-details small { font-size: 12px; }
+  .payable-row { min-height: 78px; padding: 12px 0; gap: 14px; }
+  .payable-main strong { font-size: 15px; }
+  .payable-main small { font-size: 12px; margin-top: 5px; }
+  .payable-amount { font-size: 15px; }
+  .payable-status { width: 34px; height: 34px; border-radius: 10px; }
+  .filter-tabs { gap: 8px; margin: 24px 0 15px; }
+  .filter-tab { padding: 9px 14px; font-size: 13px; }
+  .action-menu summary { width: 34px; height: 34px; }
+  .action-menu-content button { padding: 11px; font-size: 13px; }
+  .modal-card { width: min(560px, 100%); padding: 28px; }
+  .modal-heading h2 { font-size: 21px; }
+}

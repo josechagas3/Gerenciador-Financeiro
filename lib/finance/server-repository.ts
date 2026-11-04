@@ -69,6 +69,13 @@ function asMoney(value: unknown): MoneyCents {
   throw new FinancePersistenceError('Valor monetário retornado pelo banco é inválido.', 500)
 }
 
+function parseIntegerCents(value: unknown, label: string): MoneyCents {
+  if (typeof value === 'bigint') return value
+  const raw = String(value ?? '').trim()
+  if (!/^\d+$/.test(raw)) throw new FinancePersistenceError(`${label} deve ser enviado em centavos inteiros.`)
+  return BigInt(raw)
+}
+
 function mapAccount(row: Row): Account {
   return { id: String(row.id), name: String(row.name), type: row.account_type as Account['type'], currency: String(row.currency_code).trim(), isActive: Boolean(row.is_active), balanceCents: 0n }
 }
@@ -326,12 +333,19 @@ export async function createFinanceServerRepository() {
     const payableId = requireText(input.payableId, 'Conta pendente', 80)
     const accountId = requireText(input.accountId, 'Conta de pagamento', 80)
     const paidOn = requireDate(input.paidOn, 'Data do pagamento')
-    const paidCents = parseMoneyCents(input.paidCents as string | number | bigint)
+    const paidCents = parseIntegerCents(input.paidCents, 'Valor pago')
     const operationKey = requireText(input.operationKey, 'Chave da operação', 200)
     if (paidCents <= 0n) throw new FinancePersistenceError('O valor pago deve ser maior que zero.')
     const requestHash = hashRequest({ payableId, accountId, paidCents: paidCents.toString(), paidOn, userId: user.id })
     const result = await db.rpc('pay_payable', { p_payable_id: payableId, p_account_id: accountId, p_paid_cents: paidCents.toString(), p_paid_on: paidOn, p_operation_key: operationKey, p_request_hash: requestHash })
-    await throwIfError(result, 'Não foi possível marcar a conta como paga.')
+    if (result.error) {
+      const detail = result.error.message.toLowerCase()
+      if (detail.includes('partial payments')) throw new FinancePersistenceError('O valor pago precisa ser igual ao valor original da despesa.', 400)
+      if (detail.includes('payment account not found')) throw new FinancePersistenceError('A conta selecionada não está ativa ou não pertence ao usuário.', 403)
+      if (detail.includes('already paid')) throw new FinancePersistenceError('Esta despesa já foi paga e não pode ser registrada novamente.', 409)
+      if (detail.includes('not found')) throw new FinancePersistenceError('A despesa pendente não foi encontrada.', 404)
+      await throwIfError(result, 'Não foi possível marcar a conta como paga.')
+    }
     return mapPayable(result.data as Row)
   }
 

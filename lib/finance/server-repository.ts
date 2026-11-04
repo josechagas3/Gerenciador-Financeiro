@@ -349,6 +349,31 @@ export async function createFinanceServerRepository() {
     return mapPayable(result.data as Row)
   }
 
+  async function updatePayable(id: unknown, input: Row) {
+    const payableId = requireText(id, 'Despesa', 80)
+    const description = requireText(input.description, 'Descrição', 240)
+    const amountCents = parseMoneyCents(input.amountCents as string | number | bigint)
+    const operationKey = requireText(input.operationKey, 'Chave da operação', 200)
+    const categoryId = input.categoryId ? requireText(input.categoryId, 'Categoria', 80) : null
+    const status = input.status === 'paid' ? 'paid' : 'pending'
+    const dueOn = status === 'pending' ? requireDate(input.dueOn, 'Data de vencimento') : null
+    const paidOn = status === 'paid' ? requireDate(input.paidOn, 'Data do pagamento') : null
+    if (amountCents <= 0n) throw new FinancePersistenceError('O valor deve ser maior que zero.')
+    const notes = input.notes ? requireText(input.notes, 'Observação', 500) : null
+    const requestHash = hashRequest({ payableId, categoryId, amountCents: amountCents.toString(), dueOn, paidOn, description, notes, status, userId: user.id })
+    const result = await db.rpc('update_payable', { p_payable_id: payableId, p_category_id: categoryId, p_amount_cents: amountCents.toString(), p_due_on: dueOn, p_paid_on: paidOn, p_description: description, p_notes: notes, p_operation_key: operationKey, p_request_hash: requestHash })
+    await throwIfError(result, 'Não foi possível atualizar a despesa.')
+    return mapPayable(result.data as Row)
+  }
+  async function deletePayable(input: Row) {
+    const payableId = requireText(input.payableId, 'Despesa', 80)
+    const operationKey = requireText(input.operationKey, 'Chave da operação', 200)
+    const requestHash = hashRequest({ payableId, userId: user.id })
+    const result = await db.rpc('delete_payable', { p_payable_id: payableId, p_operation_key: operationKey, p_request_hash: requestHash })
+    await throwIfError(result, 'Não foi possível excluir a despesa.')
+    return result.data
+  }
+
   async function snapshot(): Promise<FinanceSnapshot> {
     const [accounts, categories, movements, cardResult, invoices, payables] = await Promise.all([listAccounts(), listCategories(), listMovements(), listCards(), listInvoices(), listPayables()])
     const cards = cardResult.cards
@@ -437,5 +462,5 @@ export async function createFinanceServerRepository() {
     if (row.status !== 'posted' || !['income', 'expense'].includes(String(row.transaction_type))) throw new FinancePersistenceError('Somente receitas e despesas publicadas podem ser estornadas.')
     return createEntry({ accountId: row.account_id, categoryId: row.category_id, type: row.transaction_type === 'expense' ? 'income' : 'expense', amountCents: asMoney(row.amount_cents).toString(), effectiveOn: new Date().toISOString().slice(0, 10), description: `Estorno: ${row.description}`, idempotencyKey: `reversal:${originalId}`, originalTransactionId: originalId })
   }
-  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, deleteInvoice, registerCardPurchase, registerExistingCardInvoice, registerHistoricalCardPurchaseImport, reconcileHistoricalInvoice, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry, createPayable, payPayable }
+  return { user, snapshot, listCards, listInvoices, createCard, updateCard, deleteCard, deleteInvoice, registerCardPurchase, registerExistingCardInvoice, registerHistoricalCardPurchaseImport, reconcileHistoricalInvoice, registerInvoicePayment, createAccount, updateAccount, deleteAccount, createCategory, updateCategory, deleteCategory, createEntry, updateEntry, cancelEntry, reverseEntry, createPayable, payPayable, updatePayable, deletePayable }
 }

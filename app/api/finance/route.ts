@@ -46,6 +46,7 @@ export async function POST(request: Request) {
     else if (body.resource === 'transactions' && body.action === 'cancel') result = await repository.cancelEntry(body.id)
     else if (body.resource === 'payables' && body.action === 'create') result = await repository.createPayable(data)
     else if (body.resource === 'payables' && body.action === 'pay') result = await repository.payPayable(data)
+    else if (body.resource === 'payables' && body.action === 'delete') result = await repository.deletePayable(data)
     else return NextResponse.json({ error: 'Operação financeira inválida.' }, { status: 400 })
     return NextResponse.json(jsonData({ result }), { status: 201 })
   } catch (error) { return jsonError(error) }
@@ -57,7 +58,7 @@ export async function PATCH(request: Request) {
     const repository = await createFinanceServerRepository()
     const extended = await createExtendedRepository()
     const data = body.data ?? {}
-    const result = body.resource === 'debts' ? await extended.updateDebt(body.id, data) : body.resource === 'goals' ? await extended.updateGoal(body.id, data) : body.resource === 'cards' ? await repository.updateCard(body.id, data) : body.resource === 'accounts' ? await repository.updateAccount(body.id, data) : body.resource === 'categories' ? await repository.updateCategory(body.id, data) : body.resource === 'transactions' ? await repository.updateEntry(body.id, data) : null
+    const result = body.resource === 'debts' ? await extended.updateDebt(body.id, data) : body.resource === 'goals' ? await extended.updateGoal(body.id, data) : body.resource === 'cards' ? await repository.updateCard(body.id, data) : body.resource === 'accounts' ? await repository.updateAccount(body.id, data) : body.resource === 'categories' ? await repository.updateCategory(body.id, data) : body.resource === 'transactions' ? await repository.updateEntry(body.id, data) : body.resource === 'payables' ? await repository.updatePayable(body.id, data) : null
     if (!result) return NextResponse.json({ error: 'Recurso inválido.' }, { status: 400 })
     return NextResponse.json(jsonData({ result }))
   } catch (error) { return jsonError(error) }

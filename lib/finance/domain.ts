@@ -1,7 +1,7 @@
 export type MoneyCents = bigint
 export type MoneyInput = string | number | bigint
 
-export type AccountType = 'checking' | 'savings' | 'cash' | 'credit_card' | 'investment' | 'other'
+export type AccountType = 'checking' | 'savings' | 'cash' | 'meal_voucher' | 'meal_allowance' | 'benefits' | 'credit_card' | 'investment' | 'other'
 export type EntryType = 'income' | 'expense' | 'transfer' | 'opening' | 'reversal' | 'adjustment'
 export type EntryStatus = 'pending' | 'posted' | 'cancelled'
 
@@ -11,6 +11,8 @@ export interface Account {
   type: AccountType
   currency: string
   isActive: boolean
+  institution: string | null
+  description: string | null
   balanceCents: MoneyCents
 }
 

@@ -77,7 +77,7 @@ function parseIntegerCents(value: unknown, label: string): MoneyCents {
 }
 
 function mapAccount(row: Row): Account {
-  return { id: String(row.id), name: String(row.name), type: row.account_type as Account['type'], currency: String(row.currency_code).trim(), isActive: Boolean(row.is_active), balanceCents: 0n }
+  return { id: String(row.id), name: String(row.name), type: row.account_type as Account['type'], currency: String(row.currency_code).trim(), isActive: Boolean(row.is_active), institution: row.institution ? String(row.institution) : null, description: row.description ? String(row.description) : null, balanceCents: 0n }
 }
 
 function mapCategory(row: Row): Category {
@@ -132,7 +132,7 @@ export async function createFinanceServerRepository() {
   const db = supabase.schema('finance')
 
   async function listAccounts() {
-    const { data, error } = await db.from('accounts').select('id,name,account_type,currency_code,is_active').eq('user_id', user.id).order('name')
+    const { data, error } = await db.from('accounts').select('id,name,account_type,currency_code,is_active,institution,description').eq('user_id', user.id).order('name')
     if (error) throw new FinancePersistenceError('Não foi possível carregar as contas.', 500)
     return (data ?? []).map(mapAccount)
   }
@@ -390,7 +390,10 @@ export async function createFinanceServerRepository() {
     const type = requireText(input.type, 'Tipo da conta', 30)
     const openingCents = parseMoneyCents(input.openingCents as string | number | bigint ?? '0')
     if (openingCents < 0n) throw new FinancePersistenceError('O saldo inicial não pode ser negativo.')
-    const { data, error } = await db.from('accounts').insert({ name, account_type: type, currency_code: 'BRL', user_id: user.id }).select('id,name,account_type,currency_code,is_active').single()
+    const institution = input.institution ? requireText(input.institution, 'Instituição', 120) : null
+    const description = input.description ? requireText(input.description, 'Descrição', 500) : null
+    const isActive = input.isActive !== false
+    const { data, error } = await db.from('accounts').insert({ name, account_type: type, currency_code: 'BRL', user_id: user.id, institution, description, is_active: isActive }).select('id,name,account_type,currency_code,is_active,institution,description').single()
     await throwIfError({ error }, 'Não foi possível criar a conta.')
     const account = mapAccount(data as Row)
     if (openingCents > 0n) {
@@ -400,12 +403,18 @@ export async function createFinanceServerRepository() {
   }
   async function updateAccount(id: unknown, input: Row) {
     const accountId = requireText(id, 'Conta', 80); const name = requireText(input.name, 'Nome da conta', 120); const type = requireText(input.type, 'Tipo da conta', 30)
-    const result = await db.from('accounts').update({ name, account_type: type }).eq('id', accountId).eq('user_id', user.id).select('id,name,account_type,currency_code,is_active').single()
+    const institution = input.institution ? requireText(input.institution, 'Instituição', 120) : null
+    const description = input.description ? requireText(input.description, 'Descrição', 500) : null
+    const result = await db.from('accounts').update({ name, account_type: type, institution, description, is_active: input.isActive !== false }).eq('id', accountId).eq('user_id', user.id).select('id,name,account_type,currency_code,is_active,institution,description').single()
     await throwIfError(result, 'Não foi possível atualizar a conta.')
     return mapAccount(result.data as Row)
   }
   async function deleteAccount(id: unknown) {
-    const result = await db.from('accounts').delete().eq('id', requireText(id, 'Conta', 80)).eq('user_id', user.id)
+    const accountId = requireText(id, 'Conta', 80)
+    const { data: movements, error: movementError } = await db.from('transactions').select('id').eq('account_id', accountId).eq('user_id', user.id).limit(1)
+    if (movementError) throw new FinancePersistenceError('Não foi possível verificar os vínculos da conta.', 500)
+    if (movements?.length) throw new FinancePersistenceError('Não é seguro excluir uma conta com histórico financeiro. Desative-a em vez disso.', 409)
+    const result = await db.from('accounts').delete().eq('id', accountId).eq('user_id', user.id)
     await throwIfError(result, 'Não foi possível excluir a conta.')
   }
   async function createCategory(input: Row) {

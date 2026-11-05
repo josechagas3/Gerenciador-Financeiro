@@ -77,7 +77,7 @@ function parseIntegerCents(value: unknown, label: string): MoneyCents {
 }
 
 function mapAccount(row: Row): Account {
-  return { id: String(row.id), name: String(row.name), type: row.account_type as Account['type'], currency: String(row.currency_code).trim(), isActive: Boolean(row.is_active), balanceCents: 0n }
+  return { id: String(row.id), name: String(row.name), type: row.account_type as Account['type'], currency: String(row.currency_code).trim(), isActive: Boolean(row.is_active), institution: row.institution ? String(row.institution) : null, description: row.description ? String(row.description) : null, balanceCents: 0n }
 }
 
 function mapCategory(row: Row): Category {
@@ -88,7 +88,7 @@ function mapMovement(row: Row): FinancialEntry {
   return {
     id: String(row.id), accountId: String(row.account_id), categoryId: row.category_id ? String(row.category_id) : null,
     type: row.transaction_type as FinancialEntry['type'], status: row.status as FinancialEntry['status'], amountCents: asMoney(row.amount_cents),
-    effectiveOn: new Date(String(row.occurred_at)).toISOString().slice(0, 10), description: String(row.description),
+    effectiveOn: new Date(String(row.occurred_at)).toISOString().slice(0, 10), description: String(row.description), notes: row.notes ? String(row.notes) : null,
     transferGroupId: row.transfer_group_id ? String(row.transfer_group_id) : null, idempotencyKey: String(row.operation_key),
   }
 }
@@ -132,7 +132,7 @@ export async function createFinanceServerRepository() {
   const db = supabase.schema('finance')
 
   async function listAccounts() {
-    const { data, error } = await db.from('accounts').select('id,name,account_type,currency_code,is_active').eq('user_id', user.id).order('name')
+    const { data, error } = await db.from('accounts').select('id,name,account_type,currency_code,is_active,institution,description').eq('user_id', user.id).order('name')
     if (error) throw new FinancePersistenceError('Não foi possível carregar as contas.', 500)
     return (data ?? []).map(mapAccount)
   }
@@ -142,7 +142,7 @@ export async function createFinanceServerRepository() {
     return (data ?? []).map(mapCategory)
   }
   async function listMovements() {
-    const { data, error } = await db.from('transactions').select('id,account_id,category_id,transaction_type,status,amount_cents,occurred_at,description,transfer_group_id,operation_key').eq('user_id', user.id).order('occurred_at', { ascending: false })
+    const { data, error } = await db.from('transactions').select('id,account_id,category_id,transaction_type,status,amount_cents,occurred_at,description,notes,transfer_group_id,operation_key').eq('user_id', user.id).order('occurred_at', { ascending: false })
     if (error) throw new FinancePersistenceError('Não foi possível carregar os lançamentos.', 500)
     return (data ?? []).filter((row) => row.status !== 'cancelled').map(mapMovement)
   }
@@ -390,7 +390,10 @@ export async function createFinanceServerRepository() {
     const type = requireText(input.type, 'Tipo da conta', 30)
     const openingCents = parseMoneyCents(input.openingCents as string | number | bigint ?? '0')
     if (openingCents < 0n) throw new FinancePersistenceError('O saldo inicial não pode ser negativo.')
-    const { data, error } = await db.from('accounts').insert({ name, account_type: type, currency_code: 'BRL', user_id: user.id }).select('id,name,account_type,currency_code,is_active').single()
+    const institution = input.institution ? requireText(input.institution, 'Instituição', 120) : null
+    const description = input.description ? requireText(input.description, 'Descrição', 500) : null
+    const isActive = input.isActive !== false
+    const { data, error } = await db.from('accounts').insert({ name, account_type: type, currency_code: 'BRL', user_id: user.id, institution, description, is_active: isActive }).select('id,name,account_type,currency_code,is_active,institution,description').single()
     await throwIfError({ error }, 'Não foi possível criar a conta.')
     const account = mapAccount(data as Row)
     if (openingCents > 0n) {
@@ -400,12 +403,18 @@ export async function createFinanceServerRepository() {
   }
   async function updateAccount(id: unknown, input: Row) {
     const accountId = requireText(id, 'Conta', 80); const name = requireText(input.name, 'Nome da conta', 120); const type = requireText(input.type, 'Tipo da conta', 30)
-    const result = await db.from('accounts').update({ name, account_type: type }).eq('id', accountId).eq('user_id', user.id).select('id,name,account_type,currency_code,is_active').single()
+    const institution = input.institution ? requireText(input.institution, 'Instituição', 120) : null
+    const description = input.description ? requireText(input.description, 'Descrição', 500) : null
+    const result = await db.from('accounts').update({ name, account_type: type, institution, description, is_active: input.isActive !== false }).eq('id', accountId).eq('user_id', user.id).select('id,name,account_type,currency_code,is_active,institution,description').single()
     await throwIfError(result, 'Não foi possível atualizar a conta.')
     return mapAccount(result.data as Row)
   }
   async function deleteAccount(id: unknown) {
-    const result = await db.from('accounts').delete().eq('id', requireText(id, 'Conta', 80)).eq('user_id', user.id)
+    const accountId = requireText(id, 'Conta', 80)
+    const { data: movements, error: movementError } = await db.from('transactions').select('id').eq('account_id', accountId).eq('user_id', user.id).limit(1)
+    if (movementError) throw new FinancePersistenceError('Não foi possível verificar os vínculos da conta.', 500)
+    if (movements?.length) throw new FinancePersistenceError('Não é seguro excluir uma conta com histórico financeiro. Desative-a em vez disso.', 409)
+    const result = await db.from('accounts').delete().eq('id', accountId).eq('user_id', user.id)
     await throwIfError(result, 'Não foi possível excluir a conta.')
   }
   async function createCategory(input: Row) {
@@ -426,7 +435,8 @@ export async function createFinanceServerRepository() {
   }
   async function createEntry(input: Row) {
     const entry = validateEntryInput(input)
-    const requestHash = hashRequest({ ...entry, userId: user.id })
+    const notes = input.notes ? requireText(input.notes, 'Observação', 500) : null
+    const requestHash = hashRequest({ ...entry, notes, userId: user.id })
     const result = await db.rpc('create_transaction', {
       p_account_id: entry.accountId,
       p_category_id: entry.categoryId,
@@ -439,19 +449,24 @@ export async function createFinanceServerRepository() {
       p_original_transaction_id: entry.originalTransactionId ?? null,
     })
     await throwIfError(result, 'Não foi possível criar o lançamento.')
-    return mapMovement(result.data as Row)
+    const created = result.data as Row
+    if (notes) {
+      const noteResult = await db.from('transactions').update({ notes }).eq('id', created.id).eq('user_id', user.id)
+      await throwIfError(noteResult, 'Não foi possível salvar a observação do lançamento.')
+    }
+    return mapMovement({ ...created, notes })
   }
   async function updateEntry(id: unknown, input: Row) {
     const entryId = requireText(id, 'Lançamento', 80); const entry = validateEntryInput({ ...input, idempotencyKey: input.idempotencyKey ?? `update:${entryId}` })
     const reversal = await db.from('transactions').select('id').eq('original_transaction_id', entryId).eq('user_id', user.id).limit(1).maybeSingle()
     if (reversal.error) throw new FinancePersistenceError('Não foi possível verificar o histórico do lançamento.', 500)
     if (reversal.data) throw new FinancePersistenceError('Lançamentos estornados não podem ser editados.', 409)
-    const result = await db.from('transactions').update({ category_id: entry.categoryId, transaction_type: entry.type, amount_cents: entry.amountCents.toString(), entry_sign: entry.type === 'expense' ? -1 : 1, occurred_at: `${entry.effectiveOn}T00:00:00.000Z`, description: entry.description, original_transaction_id: entry.originalTransactionId }).eq('id', entryId).eq('user_id', user.id).eq('status', 'posted').select('id,account_id,category_id,transaction_type,status,amount_cents,occurred_at,description,transfer_group_id,operation_key').single()
+    const result = await db.from('transactions').update({ category_id: entry.categoryId, transaction_type: entry.type, amount_cents: entry.amountCents.toString(), entry_sign: entry.type === 'expense' ? -1 : 1, occurred_at: `${entry.effectiveOn}T00:00:00.000Z`, description: entry.description, notes: input.notes ? requireText(input.notes, 'Observação', 500) : undefined, original_transaction_id: entry.originalTransactionId }).eq('id', entryId).eq('user_id', user.id).eq('status', 'posted').select('id,account_id,category_id,transaction_type,status,amount_cents,occurred_at,description,notes,transfer_group_id,operation_key').single()
     await throwIfError(result, 'Não foi possível atualizar o lançamento.')
     return mapMovement(result.data as Row)
   }
   async function cancelEntry(id: unknown) {
-    const result = await db.from('transactions').update({ status: 'cancelled' }).eq('id', requireText(id, 'Lançamento', 80)).eq('user_id', user.id).eq('status', 'posted').select('id,account_id,category_id,transaction_type,status,amount_cents,occurred_at,description,transfer_group_id,operation_key').single()
+    const result = await db.from('transactions').update({ status: 'cancelled' }).eq('id', requireText(id, 'Lançamento', 80)).eq('user_id', user.id).eq('status', 'posted').select('id,account_id,category_id,transaction_type,status,amount_cents,occurred_at,description,notes,transfer_group_id,operation_key').single()
     await throwIfError(result, 'Não foi possível cancelar o lançamento.')
     return mapMovement(result.data as Row)
   }

@@ -52,6 +52,47 @@ button { font: inherit; cursor: pointer; }
 .auth-input { display: flex; align-items: center; gap: 8px; padding: 0 11px; border: 1px solid #dfe9e2; border-radius: 8px; color: #8ca195; background: #fbfdfc; } .auth-input:focus-within { border-color: #53b789; box-shadow: 0 0 0 3px #e3f6eb; } .auth-input input { width: 100%; border: 0; outline: 0; color: #34463c; background: transparent; padding: 11px 0; font: inherit; font-size: 12px; } .password-toggle { display: grid; place-items: center; border: 0; padding: 0; color: #8ca195; background: transparent; cursor: pointer; }
 .auth-submit { margin-top: 3px; justify-content: center; } .auth-error { color: #b65e49; font-size: 11px; margin: 0; } .auth-footnote { color: #9aa79f; text-align: center; font-size: 10px; margin: 25px 0 0; } .logout-button { border: 0; color: #789187; background: transparent; cursor: pointer; font-size: 11px; }
 .module-grid { grid-template-columns: minmax(270px, .8fr) minmax(0, 1.4fr); gap: 17px; margin-bottom: 17px; }
+.accounts-module { display: flex; flex-direction: column; gap: 18px; }
+.accounts-toolbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; }
+.accounts-toolbar h2 { margin: 0; color: #2a3a31; font-size: 18px; }
+.accounts-subtitle { color: #89978f; font-size: 11px; margin: 7px 0 0; }
+.accounts-error { margin: 0; }
+.account-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(245px, 1fr)); gap: 14px; }
+.account-card { min-height: 218px; padding: 18px; border: 1px solid #dfeae3; border-radius: 13px; background: linear-gradient(145deg, #fff, #f5fbf7); box-shadow: 0 8px 22px rgba(47, 91, 68, .05); }
+.account-card-inactive { opacity: .72; filter: saturate(.7); }
+.account-card-top { display: flex; align-items: center; gap: 8px; }
+.account-type-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; color: #218b5d; background: #def4e7; }
+.account-type-meal_voucher, .account-type-meal_allowance { color: #9a6b30; background: #fff1d8; }
+.account-type-benefits { color: #6d62a8; background: #eeeafd; }
+.account-status { margin-left: auto; color: #9a7465; background: #fff0eb; border-radius: 20px; padding: 5px 8px; font-size: 9px; font-weight: 700; }
+.account-status-active { color: #258f61; background: #e5f7ec; }
+.account-card-body { display: flex; flex-direction: column; margin-top: 24px; }
+.account-card-body h3 { margin: 0; color: #2f4337; font-size: 15px; }
+.account-card-body p { margin: 5px 0 0; color: #7d8d84; font-size: 10px; }
+.account-card-body span, .account-card-body small { margin-top: 10px; color: #88978f; font-size: 10px; }
+.account-card-body small { margin-top: 4px; min-height: 14px; }
+.account-card-body strong { margin-top: 19px; color: #263d31; font-size: 21px; letter-spacing: -.03em; }
+.account-card-body em { margin-top: 3px; color: #9aa79f; font-size: 9px; font-style: normal; }
+.form-field textarea { width: 100%; resize: vertical; border: 1px solid #dfe9e2; border-radius: 7px; background: #fbfdfc; color: #304139; font: inherit; font-size: 12px; padding: 10px 11px; outline: none; }
+.form-field textarea:focus { border-color: #53b789; box-shadow: 0 0 0 3px #e3f6eb; }
+.switch-field { display: flex; align-items: center; gap: 8px; color: #718078; font-size: 11px; font-weight: 600; }
+.switch-field input { accent-color: #209c68; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 4px; }
+.modal-actions .outline-button { width: auto; padding: 10px 14px; }
+.modal-actions .primary-button { width: auto; }
+.entry-kind-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.entry-kind-card { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; padding: 18px; border: 1px solid #dfe9e2; border-radius: 11px; background: #fbfdfc; color: #304139; text-align: left; cursor: pointer; transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+.entry-kind-card:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(47, 91, 68, .08); }
+.entry-kind-income { border-color: #b9e5c9; background: #f3fcf6; }
+.entry-kind-expense { border-color: #f0d0b6; background: #fff9f4; }
+.entry-kind-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: #dff5e6; color: #248c5b; font-size: 19px; font-weight: 700; }
+.entry-kind-expense .entry-kind-icon { background: #ffe5d5; color: #c36e35; }
+.entry-kind-card strong { font-size: 14px; }
+.entry-kind-card small { color: #839188; font-size: 10px; line-height: 1.45; }
+.income-button { background: #278f5c; }
+.expense-button { background: #c9783e; }
+@media (max-width: 560px) { .entry-kind-options { grid-template-columns: 1fr; } }
+
 .form-panel form { display: flex; flex-direction: column; gap: 13px; margin-top: 20px; }
 .form-field { display: flex; flex-direction: column; gap: 6px; color: #718078; font-size: 10px; font-weight: 600; }
 .form-field input, .form-field select, .filter-grid input, .filter-grid select { width: 100%; border: 1px solid #dfe9e2; border-radius: 7px; background: #fbfdfc; color: #304139; font: inherit; font-size: 12px; padding: 10px 11px; outline: none; }

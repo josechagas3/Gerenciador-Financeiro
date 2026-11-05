@@ -33,6 +33,7 @@ export interface FinancialEntry {
   amountCents: MoneyCents
   effectiveOn: string
   description: string
+  notes: string | null
   transferGroupId: string | null
   idempotencyKey: string
 }

@@ -1,0 +1,128 @@
+-- Corrige o tipo da transaction criada ao estornar uma despesa paga.
+-- A constraint transactions_check1 exige original_transaction_id somente
+-- para transactions do tipo reversal ou adjustment.
+create or replace function finance.delete_payable(
+  p_payable_id uuid,
+  p_operation_key text,
+  p_request_hash text
+) returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_payable finance.payables;
+  v_transaction finance.transactions;
+  v_key finance.idempotency_keys;
+  v_reserved text;
+  v_reversal_key text := 'payable-reversal:' || p_payable_id::text;
+begin
+  if v_user_id is null then
+    raise exception 'authentication required' using errcode = '42501';
+  end if;
+  if p_payable_id is null or p_operation_key is null or length(p_operation_key) not between 16 and 200 then
+    raise exception 'invalid delete request';
+  end if;
+  if p_request_hash is null or length(btrim(p_request_hash)) = 0 then
+    raise exception 'request hash is required';
+  end if;
+
+  insert into finance.idempotency_keys(key, operation, request_hash, user_id)
+  values (p_operation_key, 'delete_payable', p_request_hash, v_user_id)
+  on conflict (key) do nothing
+  returning key into v_reserved;
+
+  if v_reserved is null then
+    select * into v_key
+    from finance.idempotency_keys
+    where key = p_operation_key
+    for update;
+    if v_key.user_id is distinct from v_user_id
+       or v_key.operation <> 'delete_payable'
+       or v_key.request_hash <> p_request_hash then
+      raise exception 'idempotency key was already used with a different request';
+    end if;
+    return true;
+  end if;
+
+  select * into v_payable
+  from finance.payables
+  where id = p_payable_id and user_id = v_user_id
+  for update;
+
+  if not found then
+    raise exception 'payable not found' using errcode = 'P0002';
+  end if;
+
+  if v_payable.status = 'pending' then
+    delete from finance.payables where id = p_payable_id and user_id = v_user_id;
+    return true;
+  end if;
+
+  if v_payable.status <> 'paid' then
+    raise exception 'payable is already cancelled';
+  end if;
+  if v_payable.paid_transaction_id is null or v_payable.paid_account_id is null then
+    raise exception 'paid transaction is missing';
+  end if;
+
+  insert into finance.idempotency_keys(key, operation, request_hash, user_id)
+  values (v_reversal_key, 'payable_reversal', p_request_hash, v_user_id)
+  on conflict (key) do nothing
+  returning key into v_reserved;
+
+  select * into v_transaction
+  from finance.transactions
+  where operation_key = v_reversal_key and user_id = v_user_id
+  for update;
+
+  if not found then
+    select * into v_transaction
+    from finance.transactions
+    where id = v_payable.paid_transaction_id and user_id = v_user_id
+    for update;
+
+    if not found or v_transaction.status <> 'posted' or v_transaction.transaction_type <> 'expense' then
+      raise exception 'paid transaction is not reversible';
+    end if;
+
+    insert into finance.transactions(
+      account_id,
+      category_id,
+      transaction_type,
+      status,
+      amount_cents,
+      entry_sign,
+      occurred_at,
+      description,
+      original_transaction_id,
+      operation_key,
+      user_id
+    )
+    values (
+      v_transaction.account_id,
+      v_transaction.category_id,
+      'reversal',
+      'posted',
+      v_transaction.amount_cents,
+      1,
+      now(),
+      'Estorno: ' || v_transaction.description,
+      v_transaction.id,
+      v_reversal_key,
+      v_user_id
+    )
+    returning * into v_transaction;
+  end if;
+
+  update finance.payables
+  set status = 'cancelled', updated_at = now()
+  where id = p_payable_id and user_id = v_user_id;
+
+  return true;
+end;
+$$;
+
+grant execute on function finance.delete_payable(uuid, text, text) to authenticated;
+revoke execute on function finance.delete_payable(uuid, text, text) from public, anon;

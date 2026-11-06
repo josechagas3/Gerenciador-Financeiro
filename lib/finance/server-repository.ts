@@ -106,15 +106,22 @@ export async function getFinanceAuthContext() {
   return { supabase, user: data.user }
 }
 
-async function throwIfError(result: { error: { code?: string; message: string } | null }, fallback: string) {
+async function throwIfError(result: { error: { code?: string; message: string; details?: string; hint?: string } | null }, fallback: string) {
   if (!result.error) return
-  const { code, message } = result.error
+  const { code, message, details, hint } = result.error
+  console.error('[finance] Supabase operation failed', { code: code ?? 'unknown', message, details, hint })
   if (code === 'PGRST202' || code === '42883' || /register_existing_card_invoice.*(not found|does not exist)|function .*register_existing_card_invoice/i.test(message)) {
     throw new FinancePersistenceError('A função de cadastro de fatura não está instalada no Supabase autorizado. Aplique a migration 20261030000700_finance_reconcile_historical_invoices.sql antes de tentar novamente.', 503)
   }
-  const status = code === '23503' ? 409 : code === '42501' ? 403 : 400
+  if (code === '42501') throw new FinancePersistenceError('Você não tem autorização para alterar este lançamento.', 403)
+  if (code === '23503') throw new FinancePersistenceError('Não é possível excluir este registro porque ele possui lançamentos relacionados.', 409)
+  if (code === '23514') throw new FinancePersistenceError('A operação violaria uma regra de integridade financeira.', 409)
+  if (code === '23505') throw new FinancePersistenceError('Esta operação já foi processada ou a chave informada já está em uso.', 409)
+  if (code === 'P0002' || /payable not found/i.test(message)) throw new FinancePersistenceError('A despesa não foi encontrada ou não pertence ao usuário atual.', 404)
+  if (/already cancelled/i.test(message)) throw new FinancePersistenceError('Esta despesa já está cancelada.', 409)
+  if (/paid transaction is missing|paid transaction is not reversible/i.test(message)) throw new FinancePersistenceError('A despesa paga está inconsistente e não pode ser estornada.', 409)
   const detail = process.env.NODE_ENV === 'development' ? ` Detalhe técnico [${code ?? 'sem código'}]: ${message}` : ''
-  throw new FinancePersistenceError((code === '23503' ? 'Não é possível excluir este registro porque ele possui lançamentos relacionados.' : fallback) + detail, status)
+  throw new FinancePersistenceError(fallback + detail, 400)
 }
 
 function isMissingCreditCardsTable(error: { code?: string; message?: string } | null) {

@@ -89,6 +89,7 @@ function mapMovement(row: Row): FinancialEntry {
     id: String(row.id), accountId: String(row.account_id), categoryId: row.category_id ? String(row.category_id) : null,
     type: row.transaction_type as FinancialEntry['type'], status: row.status as FinancialEntry['status'], amountCents: asMoney(row.amount_cents),
     effectiveOn: new Date(String(row.occurred_at)).toISOString().slice(0, 10), description: String(row.description), notes: row.notes ? String(row.notes) : null,
+    originalTransactionId: row.original_transaction_id ? String(row.original_transaction_id) : null,
     transferGroupId: row.transfer_group_id ? String(row.transfer_group_id) : null, idempotencyKey: String(row.operation_key),
   }
 }
@@ -149,7 +150,7 @@ export async function createFinanceServerRepository() {
     return (data ?? []).map(mapCategory)
   }
   async function listMovements() {
-    const { data, error } = await db.from('transactions').select('id,account_id,category_id,transaction_type,status,amount_cents,occurred_at,description,notes,transfer_group_id,operation_key').eq('user_id', user.id).order('occurred_at', { ascending: false })
+    const { data, error } = await db.from('transactions').select('id,account_id,category_id,transaction_type,status,amount_cents,occurred_at,description,notes,original_transaction_id,transfer_group_id,operation_key').eq('user_id', user.id).order('occurred_at', { ascending: false })
     if (error) throw new FinancePersistenceError('Não foi possível carregar os lançamentos.', 500)
     return (data ?? []).filter((row) => row.status !== 'cancelled').map(mapMovement)
   }

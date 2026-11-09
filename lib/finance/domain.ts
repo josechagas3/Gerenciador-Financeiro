@@ -34,6 +34,7 @@ export interface FinancialEntry {
   effectiveOn: string
   description: string
   notes: string | null
+  originalTransactionId: string | null
   transferGroupId: string | null
   idempotencyKey: string
 }

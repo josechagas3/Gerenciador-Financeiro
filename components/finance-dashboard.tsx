@@ -11,7 +11,7 @@ import { PayablesManager } from '@/components/payables-manager'
 
 type Account = { id: string; name: string; type: string; currency: string; isActive: boolean; institution: string | null; description: string | null; balanceCents: string }
 type Category = { id: string; name: string; parentId: string | null; kind: 'income' | 'expense' | 'both'; isActive: boolean }
-type Movement = { id: string; accountId: string; categoryId: string | null; type: string; status: string; amountCents: string; effectiveOn: string; description: string; transferGroupId: string | null; idempotencyKey: string }
+type Movement = { id: string; accountId: string; categoryId: string | null; type: string; status: string; amountCents: string; effectiveOn: string; description: string; notes: string | null; originalTransactionId: string | null; transferGroupId: string | null; idempotencyKey: string }
 type Card = { id: string; accountId: string; name: string; brand: string; creditLimitCents: string; usedCents: string; availableCents: string; closingDay: number; dueDay: number }
 type Invoice = { id: string; cardId: string | null; accountId: string; periodStart: string; periodEnd: string; dueOn: string; totalCents: string; paidCents: string; status: string; items: Array<{ id: string; transactionId: string; description: string; occurredOn: string; totalCents: string }>; adjustments: Array<{ id: string; kind: string; description: string; occurredOn: string; totalCents: string }>; payments: Array<{ id: string; transactionId: string; paidAt: string; totalCents: string }> }
 type Debt = { id: string; creditor: string; description: string; original_cents: string; balance_cents: string; due_on: string | null; installments_total: number; installments_paid: number; status: string }
